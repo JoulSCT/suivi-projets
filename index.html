@@ -2333,13 +2333,16 @@ function renderModal(){
 
 function renderConfirmDeleteModalInner(){
   const msg = state.modal.message || 'Confirmer la suppression ?';
-  return '<h3 style="color:var(--stamp-red);display:flex;align-items:center;gap:8px;">' +
-    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 6V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v2"/></svg>' +
-    'Supprimer' +
+  const confirmLabel = state.modal.confirmLabel || 'Supprimer définitivement';
+  const cancelLabel = state.modal.cancelLabel || null;
+  const isDelete = !state.modal.confirmLabel; // default is a delete modal
+  return '<h3 style="color:'+(isDelete?'var(--stamp-red)':'var(--navy)')+';display:flex;align-items:center;gap:8px;">' +
+    (isDelete ? '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 6V4a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2v2"/></svg>Supprimer' : '✓ Confirmer') +
     '</h3>' +
-    '<p style="margin:10px 0 22px;color:var(--ink-soft);">' + escapeHtml(msg) + '</p>' +
+    '<p style="margin:10px 0 22px;color:var(--ink-soft);white-space:pre-line;">' + escapeHtml(msg) + '</p>' +
     '<div class="form-actions">' +
-      '<button class="btn btn-primary" style="background:var(--stamp-red);border-color:var(--stamp-red);" data-action="confirm-delete-ok">Supprimer définitivement</button>' +
+      '<button class="btn btn-primary" style="'+(isDelete?'background:var(--stamp-red);border-color:var(--stamp-red);':'')+'" data-action="confirm-delete-ok">' + escapeHtml(confirmLabel) + '</button>' +
+      (cancelLabel ? '<button class="btn" style="background:#F0FAF5;border-color:#B8DEC8;color:var(--sage);" data-action="confirm-secondary-ok">' + escapeHtml(cancelLabel) + '</button>' : '') +
       '<button class="btn btn-ghost" data-action="close-modal">Annuler</button>' +
     '</div>';
 }
@@ -4180,13 +4183,31 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'prio-mark-done': {
       const pmId = el.getAttribute('data-task-id');
       const pmPid = el.getAttribute('data-project-id');
-      let pmTask = null;
-      for(const s of getSeances(pmPid)){ pmTask=(s.taches||[]).find(x=>x.id===pmId); if(pmTask) break; }
-      if(!pmTask) for(const pg of getPages(pmPid)){ pmTask=(pg.taches||[]).find(x=>x.id===pmId); if(pmTask) break; }
-      if(!pmTask){ const p=getProject(pmPid); pmTask=(p&&p.directTasks||[]).find(x=>x.id===pmId); }
-      if(!pmTask) getEPV(pmPid).forEach(e=>{ if(!pmTask) pmTask=(e.taches||[]).find(x=>x.id===pmId); });
-      if(pmTask){ setTaskStatut(pmTask,'fait'); pmTask.priority=false; persistAndRender(); }
-      break;
+      state.modal = {
+        type: 'confirm-delete',
+        message: 'Marquer cette tâche comme traitée ?\n\nAjouter au Rapport d\'Activités ?',
+        confirmLabel: '✓ Traiter + R.A.',
+        cancelLabel: '✓ Traiter sans R.A.',
+        pendingAction: () => {
+          let pmTask = null;
+          for(const s of getSeances(pmPid)){ pmTask=(s.taches||[]).find(x=>x.id===pmId); if(pmTask) break; }
+          if(!pmTask) for(const pg of getPages(pmPid)){ pmTask=(pg.taches||[]).find(x=>x.id===pmId); if(pmTask) break; }
+          if(!pmTask){ const p=getProject(pmPid); pmTask=(p&&p.directTasks||[]).find(x=>x.id===pmId); }
+          if(!pmTask) getEPV(pmPid).forEach(e=>{ if(!pmTask) pmTask=(e.taches||[]).find(x=>x.id===pmId); });
+          if(pmTask){ setTaskStatut(pmTask,'fait (R.A.)'); pmTask.priority=false; }
+          state.modal=null; persistAndRender();
+        },
+        secondaryAction: () => {
+          let pmTask = null;
+          for(const s of getSeances(pmPid)){ pmTask=(s.taches||[]).find(x=>x.id===pmId); if(pmTask) break; }
+          if(!pmTask) for(const pg of getPages(pmPid)){ pmTask=(pg.taches||[]).find(x=>x.id===pmId); if(pmTask) break; }
+          if(!pmTask){ const p=getProject(pmPid); pmTask=(p&&p.directTasks||[]).find(x=>x.id===pmId); }
+          if(!pmTask) getEPV(pmPid).forEach(e=>{ if(!pmTask) pmTask=(e.taches||[]).find(x=>x.id===pmId); });
+          if(pmTask){ setTaskStatut(pmTask,'fait'); pmTask.priority=false; }
+          state.modal=null; persistAndRender();
+        }
+      };
+      render(); break;
     }
     case 'toggle-priority': {
       const tpId     = el.getAttribute('data-task-id');
@@ -4370,6 +4391,14 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'confirm-delete-ok': {
       if(state.modal && state.modal.pendingAction){
         state.modal.pendingAction();
+      } else {
+        state.modal = null; render();
+      }
+      break;
+    }
+    case 'confirm-secondary-ok': {
+      if(state.modal && state.modal.secondaryAction){
+        state.modal.secondaryAction();
       } else {
         state.modal = null; render();
       }
