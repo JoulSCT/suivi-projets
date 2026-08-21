@@ -1395,6 +1395,7 @@ function renderCalRowModalInner(){
             '<div class="form-row"><label>Mois de début</label><select id="cr-ev-start">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
             '<div class="form-row"><label>Mois de fin</label><select id="cr-ev-end">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
           '</div>' +
+          '<div class="form-row"><label>Année</label><input type="number" id="cr-ev-year" value="'+state.calYear+'" min="2000" max="2100" style="width:120px;"></div>' +
           '<div class="form-row"><label>Couleur</label>' +
             '<div style="display:flex;gap:7px;flex-wrap:wrap;" id="cr-ev-color-picker">' +
               CAL_COLORS.map(c=>'<button type="button" class="cal-legend-swatch '+c.key+'" style="width:26px;height:26px;border-radius:6px;border:3px solid transparent;cursor:pointer;transition:transform .1s;" data-row-color="'+c.key+'" title="'+c.label+'"></button>').join('') +
@@ -3764,6 +3765,8 @@ document.getElementById('app').addEventListener('click', function(e){
           const evText = (document.getElementById('cr-ev-text').value||'').trim();
           const evStart = Number(document.getElementById('cr-ev-start').value);
           const evEnd = Math.max(evStart, Number(document.getElementById('cr-ev-end').value));
+          const evYearEl = document.getElementById('cr-ev-year');
+          const evYear = (evYearEl && Number(evYearEl.value)) || state.calYear;
           const evColor = document.getElementById('cr-ev-color').value || 'ec-rose';
           const evRecurring = document.getElementById('cr-ev-recurring').checked;
           const evRemOn = document.getElementById('cr-ev-reminder').checked;
@@ -3773,7 +3776,7 @@ document.getElementById('app').addEventListener('click', function(e){
             unit: document.getElementById('cr-rem-unit').value||'mois',
             recurring: document.getElementById('cr-rem-recurring').checked
           } : { active:false };
-          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:state.calYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, recurring:evRecurring, reminder:evReminder });
+          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:evYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, recurring:evRecurring, reminder:evReminder });
         }
       }
       state.modal=null; persistAndRender(); break;

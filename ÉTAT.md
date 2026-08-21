@@ -34,6 +34,16 @@ calendrier à un projet réel de l'app se confirme plus tard, ce sera une
 évolution de modèle de données à part entière (à documenter dans ce fichier
 le jour où elle est demandée).
 
+**Complément (même jour)** : Jul a signalé que le champ Année ne s'affichait
+« toujours pas ». Cause trouvée : il existe **deux chemins distincts** pour
+créer un événement — (1) cliquer directement sur une cellule du calendrier
+(modale `renderCalEventModalInner`, corrigée dans le point précédent), et
+(2) cliquer sur « + Groupe » puis cocher « Ajouter un premier événement sur
+ce groupe » (formulaire intégré à `renderCalRowModalInner`, jamais touché
+lors du premier passage). Le champ Année a été ajouté aux deux chemins pour
+qu'ils offrent des champs cohérents (`cr-ev-year` dans le formulaire, lu par
+`save-cal-row` dans `14-event-delegation.js`).
+
 Contrôle anti-régression : `node --check` OK sur les 2 fichiers modifiés et
 sur le bundle final. Script de fumée simulant la sauvegarde d'un événement
 (création + édition, changement de groupe et d'année dans les deux cas) —
