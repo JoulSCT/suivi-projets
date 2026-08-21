@@ -38,7 +38,7 @@ function renderCalendar(standalone){
   const grouped = categories.map(cat => ({ cat, rows: rows.filter(r=>r.category===cat) }));
 
   function renderRow(row){
-    const labelCell = '<td class="cal-row-label col-label" data-action="edit-cal-row" data-id="'+row.id+'" title="Modifier cette ligne" style="cursor:pointer;">' +
+    const labelCell = '<td class="cal-row-label col-label" data-action="edit-cal-row" data-id="'+row.id+'" title="Modifier ce groupe" style="cursor:pointer;">' +
       '<div class="cal-row-label-inner">' +
         escapeHtml(row.label) +
         (row.sub ? '<span class="cal-row-label-sub">'+escapeHtml(row.sub)+'</span>' : '') +
@@ -146,7 +146,7 @@ function renderCalendar(standalone){
   });
 
   const thead = '<thead><tr>' +
-    '<th class="cal-th-label col-label">Activité / Projet</th>' +
+    '<th class="cal-th-label col-label">Groupe de projet</th>' +
     CAL_MONTHS_SHORT.map((m,i)=>'<th class="cal-th-month col-month'+(i===currentMonth?' current-month':'')+'">' + m + '</th>').join('') +
   '</tr></thead>';
 
@@ -156,21 +156,21 @@ function renderCalendar(standalone){
   '</div>';
 
   const emptyHint = rows.length===0
-    ? '<div class="empty-state small" style="margin-top:12px;"><p style="margin:0;">Ajoutez des lignes avec le bouton <strong>+ Ajouter une ligne</strong> pour commencer à planifier votre année.</p></div>'
+    ? '<div class="empty-state small" style="margin-top:12px;"><p style="margin:0;">Ajoutez des groupes avec le bouton <strong>+ Ajouter un groupe</strong> pour commencer à planifier votre année.</p></div>'
     : '';
 
   const controls = '<div class="cal-year-bar">' +
     '<button class="cal-year-btn" data-action="cal-prev-year">← '+(year-1)+'</button>' +
     '<span class="cal-year-display">'+year+'</span>' +
     '<button class="cal-year-btn" data-action="cal-next-year">'+(year+1)+' →</button>' +
-    '<button class="btn btn-primary no-print" data-action="add-cal-row" style="margin-left:10px;font-size:.78rem;padding:6px 12px;">+ Ligne</button>' +
+    '<button class="btn btn-primary no-print" data-action="add-cal-row" style="margin-left:10px;font-size:.78rem;padding:6px 12px;">+ Groupe</button>' +
     '<button class="btn no-print" data-action="print-pv" style="font-size:.78rem;padding:6px 12px;">Imprimer</button>' +
   '</div>';
 
   if(standalone){
     return '<p class="eyebrow">Planning</p>' +
       '<h1 class="page-title">Calendrier annuel</h1>' +
-      '<p class="page-sub">Cliquez sur une cellule pour ajouter un événement · <strong>↻</strong> = rappel annuel automatique · Cliquez sur un intitulé de ligne pour le modifier</p>' +
+      '<p class="page-sub">Cliquez sur une cellule pour ajouter un événement · <strong>↻</strong> = rappel annuel automatique · Cliquez sur un intitulé de groupe pour le modifier</p>' +
       controls + legend +
       '<div class="cal-wrap"><table class="cal-table">' + thead + '<tbody>' + tableBody + '</tbody></table></div>' +
       emptyHint;
@@ -192,11 +192,12 @@ function renderCalEventModalInner(){
 
   return '<h3>'+title+'</h3>' +
     '<div class="form-row"><label>Texte</label><input type="text" id="ce-text" value="'+escapeHtml(ev.text||'')+'" placeholder="Ex : Envoi questionnaire, Démarrage pilote…"></div>' +
-    (m.isNew && m.rowId ? '' : '<div class="form-row"><label>Ligne</label><select id="ce-row"><option value="">— Choisir —</option>' + rows.map(r=>'<option value="'+r.id+'"'+(ev.rowId===r.id?' selected':'')+'>'+escapeHtml(r.label)+'</option>').join('') + '</select></div>') +
+    '<div class="form-row"><label>Groupe de projet</label><select id="ce-row"><option value="">— Choisir —</option>' + rows.map(r=>'<option value="'+r.id+'"'+((ev.rowId||m.rowId)===r.id?' selected':'')+'>'+escapeHtml(r.label)+'</option>').join('') + '</select></div>' +
     '<div class="form-grid2">' +
       '<div class="form-row"><label>Mois de début</label><select id="ce-start">' + months.map((mo,i)=>'<option value="'+i+'"'+(ev.startMonth===i?' selected':'')+'>'+mo+'</option>').join('') + '</select></div>' +
       '<div class="form-row"><label>Mois de fin</label><select id="ce-end">' + months.map((mo,i)=>'<option value="'+i+'"'+(ev.endMonth===i?' selected':'')+'>'+mo+'</option>').join('') + '</select></div>' +
     '</div>' +
+    '<div class="form-row"><label>Année</label><input type="number" id="ce-year" value="'+(ev.year||state.calYear)+'" min="2000" max="2100" style="width:120px;"></div>' +
     '<div class="form-row"><label>Couleur</label><div style="display:flex;gap:8px;flex-wrap:wrap;" id="ce-color-picker">' +
       CAL_COLORS.map(c=>'<button type="button" class="cal-legend-swatch '+c.key+'" style="width:28px;height:28px;border-radius:6px;border:3px solid '+(ev.colorClass===c.key?'var(--navy)':'transparent')+';cursor:pointer;transition:transform .1s;" data-color="'+c.key+'" title="'+c.label+'"></button>').join('') +
     '</div><input type="hidden" id="ce-color" value="'+(ev.colorClass||'ec-rose')+'"></div>' +
@@ -248,11 +249,11 @@ function renderCalRowModalInner(){
   const categories = [...new Set((state.data.calendar.rows||[]).map(r=>r.category||'').filter(Boolean))];
   const months = CAL_MONTHS_SHORT;
 
-  return '<h3>'+(isEdit?'Modifier la ligne':'Nouvelle ligne'+(row.label?' : '+escapeHtml(row.label):''))+'</h3>' +
+  return '<h3>'+(isEdit?'Modifier le groupe':'Nouveau groupe'+(row.label?' : '+escapeHtml(row.label):''))+'</h3>' +
 
     /* ---- Row info ---- */
     '<div style="background:var(--blush);border-radius:8px;padding:14px 16px;margin-bottom:14px;">' +
-      '<p style="font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;">Ligne du calendrier</p>' +
+      '<p style="font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;">Groupe de projet</p>' +
       '<div class="form-row"><label>Intitulé</label><input type="text" id="cr-label" value="'+escapeHtml(row.label||'')+'" placeholder="Ex : Projet Kubuta, Atelier numérique…" autofocus></div>' +
       '<div class="form-grid2">' +
         '<div class="form-row"><label>Sous-titre / responsables</label><input type="text" id="cr-sub" value="'+escapeHtml(row.sub||'')+'" placeholder="Ex : JA/NB"></div>' +
@@ -268,7 +269,7 @@ function renderCalRowModalInner(){
       '<div style="border:1px solid var(--paper-line);border-radius:8px;padding:14px 16px;background:#FAFCFF;">' +
         '<label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:.86rem;color:var(--ink);font-family:var(--font-body);text-transform:none;letter-spacing:0;margin-bottom:0;" id="ev-toggle-label">' +
           '<input type="checkbox" id="cr-add-event" style="width:15px;height:15px;accent-color:var(--navy);" onchange="document.getElementById(\'cr-ev-fields\').style.display=this.checked?\'block\':\'none\'">' +
-          '<span><strong>Ajouter un premier événement sur cette ligne</strong></span>' +
+          '<span><strong>Ajouter un premier événement sur ce groupe</strong></span>' +
         '</label>' +
         '<div id="cr-ev-fields" style="display:none;margin-top:14px;">' +
           '<div class="form-row"><label>Texte de l\'événement</label><input type="text" id="cr-ev-text" placeholder="Ex : Envoi questionnaire, Démarrage pilote…"></div>' +
@@ -313,7 +314,7 @@ function renderCalRowModalInner(){
 
     '<div class="form-actions">' +
       '<button class="btn btn-primary" data-action="save-cal-row">Enregistrer</button>' +
-      (isEdit ? '<button class="btn btn-danger" data-action="delete-cal-row" data-id="'+(row.id||'')+'">Supprimer la ligne</button>' : '') +
+      (isEdit ? '<button class="btn btn-danger" data-action="delete-cal-row" data-id="'+(row.id||'')+'">Supprimer le groupe</button>' : '') +
       '<button class="btn btn-ghost" data-action="close-modal">Annuler</button>' +
     '</div>';
 }

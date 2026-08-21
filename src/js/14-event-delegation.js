@@ -89,9 +89,11 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'save-cal-event': {
       const m2 = state.modal;
       const text = document.getElementById('ce-text').value.trim();
-      const rowId4 = m2.rowId || (document.getElementById('ce-row') && document.getElementById('ce-row').value) || m2.event.rowId;
+      const rowSelect = document.getElementById('ce-row');
+      const rowId4 = (rowSelect && rowSelect.value) || m2.rowId || m2.event.rowId;
       const start = Number(document.getElementById('ce-start').value);
       const end = Math.max(start, Number(document.getElementById('ce-end').value));
+      const yearVal = Number(document.getElementById('ce-year').value) || state.calYear;
       const colorClass = document.getElementById('ce-color').value;
       const recurring = document.getElementById('ce-recurring') ? document.getElementById('ce-recurring').checked : false;
       const reminderOn = document.getElementById('ce-reminder-on') && document.getElementById('ce-reminder-on').checked;
@@ -103,10 +105,10 @@ document.getElementById('app').addEventListener('click', function(e){
       } : { active: false };
       if(!rowId4) { state.modal=null; render(); break; }
       if(m2.isNew){
-        state.data.calendar.events.push({ id:uid(), rowId:rowId4, year:state.calYear, startMonth:start, endMonth:end, colorClass, text, recurring, reminder });
+        state.data.calendar.events.push({ id:uid(), rowId:rowId4, year:yearVal, startMonth:start, endMonth:end, colorClass, text, recurring, reminder });
       } else {
         const ev3 = state.data.calendar.events.find(x=>x.id===m2.event.id);
-        if(ev3){ ev3.text=text; ev3.startMonth=start; ev3.endMonth=end; ev3.colorClass=colorClass; ev3.rowId=rowId4; ev3.recurring=recurring; ev3.reminder=reminder; }
+        if(ev3){ ev3.text=text; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.rowId=rowId4; ev3.recurring=recurring; ev3.reminder=reminder; }
       }
       state.modal=null; persistAndRender(); break;
     }
@@ -851,18 +853,46 @@ document.getElementById('app').addEventListener('change', function(e){
     if(t.matches('[data-field="task-date"]')) arr[i].echeance = t.value;
   }
 
+  if(t.matches('.epv-task-priority')){
+    const arr = currentDraftTasks();
+    if(arr){
+      const i = Number(t.getAttribute('data-idx'));
+      if(arr[i]){
+        arr[i].priority = t.checked;
+        if(!t.checked) arr[i].priorityFrom = null;
+      }
+    }
+  }
+  if(t.matches('.epv-prio-when') || t.matches('.epv-prio-date')){
+    const arr = currentDraftTasks();
+    if(arr){
+      const row = t.closest('.epv-task-row');
+      const idxInput = row && row.querySelector('.epv-task-priority');
+      const i = idxInput ? Number(idxInput.getAttribute('data-idx')) : NaN;
+      if(arr[i] && arr[i].priority){
+        const whenLater = row.querySelector('.epv-prio-when[value="later"]');
+        const dateVal = row.querySelector('.epv-prio-date');
+        arr[i].priorityFrom = (whenLater && whenLater.checked && dateVal && dateVal.value) ? dateVal.value : null;
+      }
+    }
+  }
+
   if(t.matches('[data-field="dash-task-statut"]')){
     const projectId = t.getAttribute('data-project-id');
-    const origin = t.getAttribute('data-origin');
     const taskId = t.getAttribute('data-task-id');
     const newStatut = t.value;
-    if(origin==='seance'){
-      const s = getSeances(projectId).find(x=>x.id===t.getAttribute('data-seance-id'));
-      if(s){ const task=(s.taches||[]).find(x=>x.id===taskId); if(task) setTaskStatut(task, newStatut); }
-    } else {
-      const pg = getPages(projectId).find(x=>x.id===t.getAttribute('data-page-id'));
-      if(pg){ const task=(pg.taches||[]).find(x=>x.id===taskId); if(task) setTaskStatut(task, newStatut); }
+    const proj = getProject(projectId);
+    let task = proj ? (proj.directTasks||[]).find(x=>x.id===taskId) : null;
+    if(!task){
+      for(const s of getSeances(projectId)){ task = (s.taches||[]).find(x=>x.id===taskId); if(task) break; }
     }
+    if(!task){
+      for(const pg of getPages(projectId)){ task = (pg.taches||[]).find(x=>x.id===taskId); if(task) break; }
+    }
+    if(!task){
+      for(const entry of getEPV(projectId)){ task = (entry.taches||[]).find(x=>x.id===taskId); if(task) break; }
+    }
+    if(task) setTaskStatut(task, newStatut);
     persistAndRender();
   }
 
