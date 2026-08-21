@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Suivi de Projets v9</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,500;8..60,600;8..60,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* Early error catcher - runs before main script, survives parse failures */
+window.onerror = function(msg, src, line, col, err){
+  var app = document.getElementById('app');
+  if(app) app.innerHTML =
+    '<div style="padding:32px;font-family:monospace;font-size:13px;color:#A6383A;background:#FEF2F2;min-height:100vh;">' +
+    '<b>Erreur JS détectée :</b><br><br>' + msg +
+    '<br><br>Ligne : ' + line + ' · Colonne : ' + col +
+    (err ? '<br><br><pre style="white-space:pre-wrap;">' + (err.stack||err) + '</pre>' : '') +
+    '</div>';
+  return true;
+};
+window.addEventListener('unhandledrejection', function(e){
+  var app = document.getElementById('app');
+  if(app && app.innerHTML.trim() === '') app.innerHTML =
+    '<div style="padding:32px;font-family:monospace;font-size:13px;color:#A6383A;background:#FEF2F2;min-height:100vh;">' +
+    '<b>Promise rejetée :</b><br><br>' + (e.reason && e.reason.message ? e.reason.message : String(e.reason)) +
+    (e.reason && e.reason.stack ? '<br><br><pre style="white-space:pre-wrap;">' + e.reason.stack + '</pre>' : '') +
+    '</div>';
+});
+</script>
+
+<script src="js/01-core.js"></script>
+<script src="js/02-render-root.js"></script>
+<script src="js/03-home.js"></script>
+<script src="js/04-calendar.js"></script>
+<script src="js/05-dashboard.js"></script>
+<script src="js/06-project-view.js"></script>
+<script src="js/07-seance-page.js"></script>
+<script src="js/08-modals.js"></script>
+<script src="js/09-actions-nav-seances-pages.js"></script>
+<script src="js/10-actions-projects-export.js"></script>
+<script src="js/11-import.js"></script>
+<script src="js/12-reminder-epv.js"></script>
+<script src="js/13-priority-pv-import.js"></script>
+<script src="js/14-event-delegation.js"></script>
+<script src="js/15-init.js"></script>
+
+</body>
+</html>
