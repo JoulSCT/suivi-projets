@@ -47,6 +47,8 @@ document.getElementById('app').addEventListener('click', function(e){
           const evText = (document.getElementById('cr-ev-text').value||'').trim();
           const evStart = Number(document.getElementById('cr-ev-start').value);
           const evEnd = Math.max(evStart, Number(document.getElementById('cr-ev-end').value));
+          const evYearEl = document.getElementById('cr-ev-year');
+          const evYear = (evYearEl && Number(evYearEl.value)) || state.calYear;
           const evColor = document.getElementById('cr-ev-color').value || 'ec-rose';
           const evRecurring = document.getElementById('cr-ev-recurring').checked;
           const evRemOn = document.getElementById('cr-ev-reminder').checked;
@@ -56,7 +58,7 @@ document.getElementById('app').addEventListener('click', function(e){
             unit: document.getElementById('cr-rem-unit').value||'mois',
             recurring: document.getElementById('cr-rem-recurring').checked
           } : { active:false };
-          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:state.calYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, recurring:evRecurring, reminder:evReminder });
+          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:evYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, recurring:evRecurring, reminder:evReminder });
         }
       }
       state.modal=null; persistAndRender(); break;

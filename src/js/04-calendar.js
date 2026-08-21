@@ -277,6 +277,7 @@ function renderCalRowModalInner(){
             '<div class="form-row"><label>Mois de début</label><select id="cr-ev-start">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
             '<div class="form-row"><label>Mois de fin</label><select id="cr-ev-end">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
           '</div>' +
+          '<div class="form-row"><label>Année</label><input type="number" id="cr-ev-year" value="'+state.calYear+'" min="2000" max="2100" style="width:120px;"></div>' +
           '<div class="form-row"><label>Couleur</label>' +
             '<div style="display:flex;gap:7px;flex-wrap:wrap;" id="cr-ev-color-picker">' +
               CAL_COLORS.map(c=>'<button type="button" class="cal-legend-swatch '+c.key+'" style="width:26px;height:26px;border-radius:6px;border:3px solid transparent;cursor:pointer;transition:transform .1s;" data-row-color="'+c.key+'" title="'+c.label+'"></button>').join('') +
