@@ -34,21 +34,6 @@
     --font-body:'IBM Plex Sans', sans-serif;
     --font-mono:'IBM Plex Mono', monospace;
   }
-    --paper-line:#D8E0EA;
-    --card:#FFFFFF;
-    --ink:#1E2A38;
-    --ink-soft:#6A7A8E;
-    --navy:#3D6480;
-    --navy-soft:#557A98;
-    --stamp-red:#B84040;
-    --seal-gold:#A87A3A;
-    --sage:#3E7060;
-    --blush:#E8EEF5;
-    --lavender:#EAF0F8;
-    --font-display:'Source Serif 4', serif;
-    --font-body:'IBM Plex Sans', sans-serif;
-    --font-mono:'IBM Plex Mono', monospace;
-  }
 
   *{box-sizing:border-box;}
   body{margin:0;font-family:var(--font-body);background:var(--paper);color:var(--ink);font-size:1rem;line-height:1.55;}
@@ -443,7 +428,10 @@
     .form-grid2{grid-template-columns:1fr;}
     .task-row{grid-template-columns:1fr;}
   }
+
 </style>
+</head>
+<body>
 
 <div id="app"></div>
 
@@ -471,8 +459,6 @@ window.addEventListener('unhandledrejection', function(e){
 
 <script>
 "use strict";
-
-
 
 /* ============== ICONS ============== */
 const ICONS = {
@@ -1124,7 +1110,6 @@ function renderHome(){
       renderCalendar(false) +
     '</div>';
 }
-
 
 /* ============== CALENDAR VIEW ============== */
 const CAL_MONTHS_SHORT = ['Jan','Fév','Mar','Avr','Mai','Juin','Juil','Aoû','Sep','Oct','Nov','Déc'];
@@ -3659,78 +3644,6 @@ function pvFindProject(nomProjet){
 function renderPvImportModalInner(){
   const pv = state.modal.pv;
   if(!pv){
-    return '<h3>Importer un PV</h3>' +
-      '<p style="color:var(--ink-soft);font-size:.88rem;margin-bottom:16px;">Sélectionnez un fichier <strong>.json</strong> exporté depuis votre outil de PV.</p>' +
-      '<div style="border:2px dashed var(--paper-line);border-radius:8px;padding:32px;text-align:center;">' +
-        '<input type="file" id="pv-file-input" accept=".json" style="display:none;">' +
-        '<button class="btn btn-primary" onclick="document.getElementById(\'pv-file-input\').click()">📂 Choisir un fichier .json</button>' +
-        '<p style="margin:10px 0 0;font-family:var(--font-mono);font-size:.7rem;color:var(--ink-soft);">Format : PV-TLM-SC-JA-AAAA-MM-JJ.json</p>' +
-      '</div>' +
-      '<div class="form-actions"><button class="btn btn-ghost" data-action="close-modal">Annuler</button></div>';
-  }
-
-  const projects = state.data.projects;
-  const allTasks = [...(pv.taches||[]).map(t=>({...t,_done:false})), ...(pv.tachesTerminees||[]).map(t=>({...t,_done:true}))];
-
-  // Group tasks by their projet field
-  const groups = {};
-  allTasks.forEach(t => {
-    const key = t.projet||'(Non attribué)';
-    if(!groups[key]) groups[key]=[]; groups[key].push(t);
-  });
-
-  const projectOptions = '<option value="">— Choisir —</option>' + projects.map(p=>'<option value="'+p.id+'">'+(p.parentId?'— ':'')+escapeHtml(p.name)+'</option>').join('');
-
-  let groupsHtml = '';
-  Object.entries(groups).forEach(([nomProjet, tasks]) => {
-    const matched = pvFindProject(nomProjet);
-    groupsHtml += '<div style="background:var(--blush);border-radius:10px;padding:14px 16px;margin-bottom:14px;">' +
-      '<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">' +
-        '<span style="font-family:var(--font-mono);font-size:.7rem;font-weight:600;color:var(--navy);">'+escapeHtml(nomProjet)+'</span>' +
-        '<span style="font-size:.74rem;color:var(--ink-soft);">→</span>' +
-        '<select class="pv-proj-select" data-groupe="'+escapeHtml(nomProjet)+'" style="padding:5px 9px;border:1px solid var(--paper-line);border-radius:6px;font-family:inherit;font-size:.82rem;flex:1;min-width:160px;">' +
-          projects.map(p=>'<option value="'+p.id+'"'+(matched&&matched.id===p.id?' selected':'')+'>'+(p.parentId?'— ':'')+escapeHtml(p.name)+'</option>').join('') +
-        '</select>' +
-      '</div>' +
-      tasks.map((t,i) => {
-        const statut = PV_STATUT_MAP[t.statut]||(t._done?'fait (R.A.)':'à faire');
-        const key2 = encodeURIComponent(nomProjet)+'-'+i;
-        return '<div style="background:rgba(255,255,255,.8);border-radius:7px;padding:9px 12px;margin-bottom:6px;border:1px solid var(--paper-line);">' +
-          '<div style="display:flex;align-items:center;gap:10px;">' +
-            '<input type="checkbox" class="pv-task-check" data-key="'+key2+'" checked style="width:15px;height:15px;accent-color:var(--navy);flex-shrink:0;">' +
-            '<span style="flex:1;font-size:.86rem;font-weight:500;">'+escapeHtml(t.titre||t.description||'')+'</span>' +
-            '<span style="font-family:var(--font-mono);font-size:.64rem;padding:2px 7px;border-radius:8px;background:'+STATUS_COLOR[statut]+'22;color:'+STATUS_COLOR[statut]+';">'+statut+'</span>' +
-          '</div>' +
-          (t.ligne ? '<p style="font-family:var(--font-mono);font-size:.64rem;color:var(--ink-soft);margin:4px 0 0 25px;">'+escapeHtml(t.ligne)+'</p>' : '') +
-          (t.note ? '<p style="font-size:.78rem;color:var(--ink-soft);margin:4px 0 0 25px;">'+escapeHtml(t.note)+'</p>' : '') +
-        '</div>';
-      }).join('') +
-    '</div>';
-  });
-
-  const notesSect = (pv.pointsForts||pv.pointsVigilance||pv.notesDiverses||pv.datesCles) ?
-    '<div style="background:var(--card);border:1px solid var(--paper-line);border-radius:8px;padding:12px 14px;margin-bottom:16px;">' +
-      '<p style="font-family:var(--font-mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 8px;">Contenu du PV</p>' +
-      (pv.pointsForts?'<p style="font-size:.84rem;margin:0 0 5px;"><strong>Points forts :</strong> '+escapeHtml(pv.pointsForts)+'</p>':'') +
-      (pv.pointsVigilance?'<p style="font-size:.84rem;margin:0 0 5px;"><strong>Vigilance :</strong> '+escapeHtml(pv.pointsVigilance)+'</p>':'') +
-      (pv.notesDiverses?'<p style="font-size:.84rem;margin:0 0 5px;"><strong>Notes :</strong> '+escapeHtml(pv.notesDiverses)+'</p>':'') +
-      (pv.datesCles?'<p style="font-size:.84rem;margin:0;"><strong>Dates clés :</strong> '+escapeHtml(pv.datesCles)+'</p>':'') +
-    '</div>' : '';
-
-  return '<h3>Importer le PV — '+escapeHtml(pv.document||'')+'</h3>' +
-    '<p style="font-family:var(--font-mono);font-size:.72rem;color:var(--ink-soft);margin-bottom:14px;">'+fmtDate(pv.date||'')+'</p>' +
-    notesSect +
-    '<p style="font-family:var(--font-mono);font-size:.64rem;text-transform:uppercase;letter-spacing:.08em;color:var(--ink-soft);margin:0 0 10px;">Tâches — cochez celles à importer et vérifiez le projet cible</p>' +
-    groupsHtml +
-    '<div class="form-actions">' +
-      '<button class="btn btn-primary" data-action="save-pv-import">✓ Importer cochées</button>' +
-      '<button class="btn btn-ghost" data-action="close-modal">Annuler</button>' +
-    '</div>';
-}
-
-function renderPvImportModalInner(){
-  const pv = state.modal.pv;
-  if(!pv){
     // File selector step
     return '<h3>Importer un PV</h3>' +
       '<p style="color:var(--ink-soft);font-size:.88rem;margin-bottom:16px;">Sélectionnez un fichier <strong>.json</strong> exporté depuis votre outil de PV.</p>' +
@@ -4765,4 +4678,5 @@ async function init(){
   }
 }
 init();
-</script>
+</script></body>
+</html>
