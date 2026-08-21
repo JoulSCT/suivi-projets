@@ -235,7 +235,7 @@
   .pv-section-title{font-family:var(--font-mono);font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 8px;}
   .pv-conclusions{margin:0 0 4px;padding:0;display:flex;flex-direction:column;gap:6px;}
   .pv-conclusions .pv-c{padding:7px 10px 7px 14px;border-left:3px solid var(--navy);font-size:.9rem;border-radius:0 4px 4px 0;background:#F7F9FC;}
-  .pv-conclusions .pv-c *, .pv-notes *, .vigilance-text *, .proj-rich-text *{border:none !important;background:transparent !important;}
+  .pv-conclusions .pv-c *, .pv-notes *, .vigilance-text *, .proj-rich-text *{border:none !important;}
   .pv-tasks-table{width:100%;border-collapse:collapse;margin-top:4px;table-layout:fixed;}
   .pv-tasks-table th{font-family:var(--font-mono);font-size:.62rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);text-align:left;padding:6px 8px;border-bottom:2px solid var(--paper-line);white-space:nowrap;}
   .pv-tasks-table td{padding:8px 8px;border-bottom:1px solid var(--paper-line);font-size:.84rem;word-wrap:break-word;overflow-wrap:break-word;}
@@ -873,6 +873,10 @@ function getPriorityTasksScheduled(){
 /* ============== HOME VIEW ============== */
 function getPreparationReminders(){
   // Returns list of upcoming reminders: {event, row, reminderMonth, reminderYear}
+  // A reminder is "due this month" if the current real month falls ANYWHERE
+  // within the preparation window [event.startMonth - offsetMonths, event.startMonth - 1],
+  // not only on its exact first month — mirrors the 'Prép.' band logic used
+  // in the calendar grid (04-calendar.js/renderCalendar), so both views agree.
   const year = new Date().getFullYear();
   const currentMonth = new Date().getMonth();
   const results = [];
@@ -881,26 +885,39 @@ function getPreparationReminders(){
 
   events.forEach(ev => {
     const rem = ev.reminder;
-    // Compute reminder offset in months
-    let offsetMonths = rem.unit === 'semaine' ? Math.ceil(rem.amount / 4.33) : Number(rem.amount)||1;
+    const offsetMonths = rem.unit === 'semaine' ? Math.ceil(rem.amount / 4.33) : Number(rem.amount)||1;
+    const isRecurring = ev.recurring || rem.recurring;
+    const remStart = ev.startMonth - offsetMonths;
+    const remEnd = ev.startMonth - 1;
 
-    // Years to check: event's own year, and recurring events for current year
-    const yearsToCheck = ev.recurring || rem.recurring ? [year, year+1] : [ev.year];
-    yearsToCheck.forEach(evYear => {
-      const offsetMonths = rem.unit === 'semaine' ? Math.ceil(rem.amount / 4.33) : Number(rem.amount)||1;
-      let remMonth = ev.startMonth - offsetMonths;
-      let remYear = evYear;
-      // Handle wrap: if remMonth < 0, it falls in the previous year
-      while(remMonth < 0){ remMonth += 12; remYear--; }
+    const push = (evYear) => results.push({ event:ev, row: cal.rows.find(r=>r.id===ev.rowId),
+      reminderMonth: currentMonth, reminderYear: year,
+      eventMonth: ev.startMonth, eventYear: evYear, offsetMonths,
+      unit: rem.unit, amount: rem.amount });
 
-      // Only show if reminder month falls in the current month of the current year
-      if(remYear === year && remMonth === currentMonth){
-        const row = cal.rows.find(r=>r.id===ev.rowId);
-        results.push({ event:ev, row, reminderMonth:remMonth, reminderYear:remYear,
-          eventMonth:ev.startMonth, eventYear:evYear, offsetMonths,
-          unit:rem.unit, amount:rem.amount });
+    // Occurrence anchored on ev.year (always checked), plus — for recurring
+    // events — the occurrence anchored on the current real year (so a
+    // recurring event keeps showing every year regardless of the year it
+    // was first created in).
+    const candidateYears = isRecurring ? [...new Set([ev.year, year])] : [ev.year];
+    candidateYears.forEach(evYear => {
+      if(evYear !== year) return; // only a window landing in the current real year matters here
+      if(remStart >= 0){
+        if(currentMonth >= remStart && currentMonth <= remEnd) push(evYear);
+      } else if(remEnd >= 0){
+        // Window starts in the previous year: only [0, remEnd] falls in evYear
+        if(currentMonth >= 0 && currentMonth <= remEnd) push(evYear);
       }
     });
+
+    // Recurring events only: the window may start in December of the
+    // current real year and wrap into next year's occurrence (e.g. a
+    // February event with 3 months' prep → window Nov-Jan).
+    if(isRecurring && remStart < 0){
+      const wrapStart = 12 + remStart;
+      const wrapEnd = remEnd >= 0 ? 11 : 12 + remEnd;
+      if(currentMonth >= wrapStart && currentMonth <= wrapEnd) push(year + 1);
+    }
   });
   return results;
 }
@@ -1058,7 +1075,8 @@ function renderHome(){
         prepReminders.map(r => {
           const rowLabel = r.row ? r.row.label : 'Activité inconnue';
           const evMonth = CAL_MONTHS_SHORT[r.event.startMonth];
-          const before = r.amount + ' ' + r.unit + (r.amount>1?'s':'') + ' avant';
+          const unitPlural = r.unit==='mois' ? 'mois' : (r.unit + (r.amount>1?'s':''));
+          const before = r.amount + ' ' + unitPlural + ' avant';
           return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #EED880;">' +
             '<span style="font-size:.85rem;">📋</span>' +
             '<div style="flex:1;">' +
@@ -1070,19 +1088,8 @@ function renderHome(){
       '</div>' +
     '</div>'
   : '');
-    '<div style="background:var(--card);border:1px solid var(--paper-line);border-radius:8px;padding:12px 18px;display:flex;gap:12px;align-items:center;">' +
-      '<span style="font-family:var(--font-display);font-size:1.4rem;font-weight:600;color:var(--navy);">'+topProjects.length+'</span>' +
-      '<span style="font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Projet'+(topProjects.length>1?'s':'')+'</span>' +
-    '</div>' +
-    '<div style="background:var(--card);border:1px solid var(--paper-line);border-radius:8px;padding:12px 18px;display:flex;gap:12px;align-items:center;cursor:pointer;" data-action="open-dashboard">' +
-      '<span style="font-family:var(--font-display);font-size:1.4rem;font-weight:600;color:var(--navy);">'+allTasksCount+'</span>' +
-      '<span style="font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Tâche'+(allTasksCount>1?'s':'')+' ouverte'+(allTasksCount>1?'s':'')+'</span>' +
-    '</div>' +
-    (overdueCount>0 ? '<div style="background:#FDEAEA;border:1px solid #E8C5BF;border-radius:8px;padding:12px 18px;display:flex;gap:12px;align-items:center;cursor:pointer;" data-action="open-dashboard">' +
-      '<span style="font-family:var(--font-display);font-size:1.4rem;font-weight:600;color:var(--stamp-red);">'+overdueCount+'</span>' +
-      '<span style="font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--stamp-red);">En retard</span>' +
-    '</div>' : '') +
-  '</div>';
+
+
 
   return '<p class="eyebrow">Vue d\'ensemble</p>' +
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
@@ -4560,18 +4567,46 @@ document.getElementById('app').addEventListener('change', function(e){
     if(t.matches('[data-field="task-date"]')) arr[i].echeance = t.value;
   }
 
+  if(t.matches('.epv-task-priority')){
+    const arr = currentDraftTasks();
+    if(arr){
+      const i = Number(t.getAttribute('data-idx'));
+      if(arr[i]){
+        arr[i].priority = t.checked;
+        if(!t.checked) arr[i].priorityFrom = null;
+      }
+    }
+  }
+  if(t.matches('.epv-prio-when') || t.matches('.epv-prio-date')){
+    const arr = currentDraftTasks();
+    if(arr){
+      const row = t.closest('.epv-task-row');
+      const idxInput = row && row.querySelector('.epv-task-priority');
+      const i = idxInput ? Number(idxInput.getAttribute('data-idx')) : NaN;
+      if(arr[i] && arr[i].priority){
+        const whenLater = row.querySelector('.epv-prio-when[value="later"]');
+        const dateVal = row.querySelector('.epv-prio-date');
+        arr[i].priorityFrom = (whenLater && whenLater.checked && dateVal && dateVal.value) ? dateVal.value : null;
+      }
+    }
+  }
+
   if(t.matches('[data-field="dash-task-statut"]')){
     const projectId = t.getAttribute('data-project-id');
-    const origin = t.getAttribute('data-origin');
     const taskId = t.getAttribute('data-task-id');
     const newStatut = t.value;
-    if(origin==='seance'){
-      const s = getSeances(projectId).find(x=>x.id===t.getAttribute('data-seance-id'));
-      if(s){ const task=(s.taches||[]).find(x=>x.id===taskId); if(task) setTaskStatut(task, newStatut); }
-    } else {
-      const pg = getPages(projectId).find(x=>x.id===t.getAttribute('data-page-id'));
-      if(pg){ const task=(pg.taches||[]).find(x=>x.id===taskId); if(task) setTaskStatut(task, newStatut); }
+    const proj = getProject(projectId);
+    let task = proj ? (proj.directTasks||[]).find(x=>x.id===taskId) : null;
+    if(!task){
+      for(const s of getSeances(projectId)){ task = (s.taches||[]).find(x=>x.id===taskId); if(task) break; }
     }
+    if(!task){
+      for(const pg of getPages(projectId)){ task = (pg.taches||[]).find(x=>x.id===taskId); if(task) break; }
+    }
+    if(!task){
+      for(const entry of getEPV(projectId)){ task = (entry.taches||[]).find(x=>x.id===taskId); if(task) break; }
+    }
+    if(task) setTaskStatut(task, newStatut);
     persistAndRender();
   }
 

@@ -2,53 +2,70 @@
 
 ## Dernière session
 
-**Réorganisation complète du projet** : passage d'un unique fichier
-monolithique (`index.html`, ~4770 lignes, ~289 Ko) à une structure modulaire
-documentée (voir `ARCHITECTURE.md`).
+**Correction de 3 bugs signalés + investigation d'un 4e** (21/08/2026).
 
-Ce qui a été fait :
-- Découpage en `src/index.html` (template) + `src/styles.css` + 15 modules
-  `src/js/0X-*.js`, chacun correspondant à une responsabilité fonctionnelle
-  clairement identifiable.
-- Création de `bundle.py` (stdlib Python pure) qui réassemble ces sources en
-  un unique `index.html` autonome à la racine — c'est ce fichier généré qui
-  reste déployé sur GitHub Pages, sans aucun changement de configuration côté
-  GitHub.
-- Deux nettoyages effectués au passage (validés avec Jul avant exécution) :
-  1. Suppression d'un bloc CSS orphelin et invalide (déclarations flottant
-     hors de tout sélecteur, sans effet) repéré à la lecture.
-  2. Suppression d'une fonction dupliquée (`renderPvImportModalInner` était
-     déclarée deux fois ; la première version était totalement inerte,
-     écrasée par la seconde — comportement de l'app inchangé).
-- Rédaction de `ARCHITECTURE.md` (vue d'ensemble, modèle de données,
-  conventions, pièges connus, carte fonctionnalité→fichier, carte des
-  impacts) et de ce fichier `ÉTAT.md`.
-- Validation finale : `node --check` sur chaque module JS individuellement
-  et sur le JS bundlé, comparaison automatisée des fonctions top-level
-  (original vs. modules extraits vs. bundle final — seul écart : la fonction
-  dupliquée retirée volontairement), et diff du CSS (identique au bloc mort
-  près). **Aucune logique métier modifiée.**
+1. ✅ **Corrigé** — Tâche marquée « prioritaire » depuis un PV (séance) ou une
+   page sans effet à l'enregistrement : la case ⭐ était visuellement
+   cochable mais son état n'était jamais lu avant la sauvegarde (seul le
+   formulaire de suivi continu/EPV la collectait réellement). Ajout d'une
+   synchronisation live dans `14-event-delegation.js` (listener `change`),
+   symétrique au traitement déjà existant pour statut/échéance de tâche.
+2. ✅ **Corrigé** — Surlignage de texte perdu à l'enregistrement d'un PV : la
+   règle CSS défensive ajoutée lors d'une session précédente pour éliminer
+   les « traits bleus » (résidus de collage Outlook/Word) incluait aussi
+   `background:transparent !important`, qui écrasait par effet de bord les
+   surlignages RTE légitimes (même mécanisme technique). Retiré cette partie
+   de la règle dans `src/styles.css`, gardé uniquement le retrait de bordure
+   (qui est la vraie correction du bug des traits bleus).
+3. ✅ **Corrigé** — Changement de statut d'une tâche depuis le tableau de
+   bord sans effet : le handler ne gérait que les origines « séance » et
+   « page » ; les tâches directes de projet et celles du suivi continu (EPV)
+   tombaient dans la mauvaise branche et la recherche échouait
+   silencieusement. Remplacé par une recherche robuste par id dans les 4
+   emplacements possibles (`14-event-delegation.js`), conforme au pattern
+   déjà établi ailleurs dans le code (piège connu #1 d'ARCHITECTURE.md).
+4. ✅ **Corrigé** — Tâche de calendrier avec temps de préparation
+   n'apparaissant pas dans « Préparation du mois » sur la page d'accueil.
+   Cause identifiée avec les précisions de Jul (événement « Rédaction
+   article », novembre 2026, rappel 4 mois avant, testé en août 2026) :
+   `getPreparationReminders()` (`03-home.js`) ne testait que le mois exact
+   `début − offset` (juillet dans son cas) au lieu de toute la fenêtre de
+   préparation `[début − offset, début − 1]` (juillet à octobre) — alors que
+   la bande visuelle « Prép. » du calendrier annuel (`04-calendar.js`,
+   `renderCalendar`), elle, couvre bien toute cette fenêtre. D'où l'écart :
+   le calendrier montrait août en zone de préparation, mais la page d'accueil
+   ne le détectait pas. Réécrit pour tester l'appartenance du mois courant à
+   toute la fenêtre, avec la même gestion de chevauchement d'année (rappels
+   récurrents) que le calendrier, pour que les deux affichages restent
+   cohérents entre eux.
 
-Aucun écart fonctionnel non annoncé par rapport à l'original.
+5. ✅ **Corrigé** — Nettoyage du bloc de code mort repéré dans `03-home.js`
+   (`renderHome()`) lors de l'investigation du bug 4 : le point-virgule qui
+   terminait prématurément l'assignation de `statsBar` a été laissé en
+   place (il ne cause aucun problème en lui-même), et le fragment de code
+   orphelin qui suivait (jamais utilisé, dupliquant en partie des cartes déjà
+   présentes dans `statsBar`) a été retiré.
+6. ✅ **Corrigé** — Faute d'orthographe « 3 moiss avant » dans le panneau
+   « Préparation projets du mois » : le code ajoutait systématiquement un
+   « s » à l'unité au pluriel, correct pour « semaine(s) » mais pas pour
+   « mois » qui est invariable en français. Ajout d'un cas particulier pour
+   « mois ».
+
+Contrôle anti-régression effectué : `node --check` sur les modules touchés et
+sur le bundle final (OK), script de fumée reproduisant fidèlement la
+correction du bug 3 sur les 4 origines de tâche (direct/séance/page/EPV,
+toutes OK) avec comparaison à l'ancien comportement buggé (confirmé en échec
+sur les origines direct/EPV avant correction). `bundle.py` réexécuté avec
+succès.
 
 ## Prochaine étape
 
-À définir avec Jul. Pistes identifiées mais non planifiées :
-- Images dans les notes (mentionné comme fonctionnalité future, mise de côté
-  jusqu'ici).
-- Import du PV du Kanban collaboratif (`board-suivi-projet.html`) dans l'app
-  principale, avec routage par tâche (archive vs. active) — mentionné dans
-  l'historique de travail comme prochaine étape naturelle, jamais démarré.
+Pistes non planifiées, en attente : images dans les notes ; import du PV du
+Kanban collaboratif (`board-suivi-projet.html`) avec routage par tâche.
 
 ## Bugs connus
 
-Aucun bug fonctionnel non corrigé identifié lors de la lecture complète du
-code (session de réorganisation). Voir §4 « Pièges connus / zones fragiles »
-de `ARCHITECTURE.md` pour les zones à surveiller lors de futures
-modifications (elles ne sont pas des bugs actuels, mais des risques de
-régression si on y touche sans précaution) :
-- Fiabilité de l'attribut d'origine d'une tâche dans le DOM (`data-origin`,
-  `data-seance-id`) — déjà contourné par recherche en cascade dans le code
-  actuel, à préserver dans toute évolution.
-- Fichier `14-event-delegation.js` volontairement non scindé plus finement
-  (voir justification dans `ARCHITECTURE.md`).
+Aucun. Voir §4 « Pièges connus / zones fragiles » d'`ARCHITECTURE.md` pour
+les zones à surveiller lors de futures modifications (pas des bugs actuels,
+des risques de régression si on y touche sans précaution).
+
