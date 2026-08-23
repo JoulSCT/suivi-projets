@@ -124,6 +124,36 @@ utiliser `setTaskStatut(task, newStatut)` pour changer un statut (gère
 { id, date, notes: html, conclusions: [html], taches: [Task] }
 ```
 
+**CalendarRow** (« groupe de projet » du calendrier annuel — étiquette
+libre, **indépendante** de `Project` ; voir §4 pour la justification) :
+```js
+{ id, label, sub, category }
+```
+
+**CalendarEvent** (un événement du calendrier annuel) :
+```js
+{
+  id, rowId,           // référence un CalendarRow.id
+  text, responsable,    // 'responsable' ajouté le 21/08/2026
+  year, startMonth, endMonth,  // mois 0-indexés (Jan=0…Déc=11)
+  colorClass,           // une clé de CAL_COLORS (04-calendar.js)
+  recurring,             // bool — l'événement lui-même se répète chaque année
+  reminder: { active, amount, unit, recurring }  // rappel de préparation ;
+    // unit ∈ 'mois'|'semaine' ; reminder.recurring est INDÉPENDANT de
+    // event.recurring (un rappel peut être annuel même si l'événement ne
+    // l'est pas, et inversement)
+}
+```
+Existe en deux chemins de création distincts (`add-cal-event` en cliquant une
+cellule, ou `save-cal-row` via « + Groupe » → « Ajouter un premier
+événement ») — **toute évolution du modèle CalendarEvent doit être
+répercutée dans les deux formulaires** (`renderCalEventModalInner` et le
+bloc `cr-ev-*` de `renderCalRowModalInner`, tous deux dans
+`04-calendar.js`) et **leurs deux handlers de sauvegarde** (`save-cal-event`
+et `save-cal-row`, tous deux dans `14-event-delegation.js`) — un oubli sur
+l'un des deux chemins a déjà causé de la confusion (voir historique de
+session, champ Année ajouté à un seul chemin dans un premier temps).
+
 Pas d'identifiants séquentiels : tout objet créé utilise `uid()` (UUID natif,
 ou repli horodaté si `crypto.randomUUID` indisponible).
 
@@ -217,11 +247,18 @@ texte brut : `seance.notes`, `seance.conclusions[]`, `page.notes`,
    `.pv-c` (bloc conclusion, avec bordure gauche navy intentionnelle) est
    différent de `.vigilance-text`/`.proj-rich-text` (texte riche sans
    bordure). Une règle défensive existe (`.pv-c *, .pv-notes *,
-   .vigilance-text *, .proj-rich-text *{border:none !important;
-   background:transparent !important;}`) pour neutraliser tout résidu de
-   mise en forme parasite provenant d'un ancien collage Word/Outlook déjà
-   enregistré en base — ne pas la retirer sans comprendre pourquoi elle
-   existe (voir historique de session, bug des « traits bleus »).
+   .vigilance-text *, .proj-rich-text *{border:none !important;}`) pour
+   neutraliser tout résidu de bordure parasite provenant d'un ancien collage
+   Word/Outlook déjà enregistré en base — ne pas la retirer sans comprendre
+   pourquoi elle existe (voir historique de session, bug des « traits
+   bleus »). **Attention** : cette règle incluait initialement aussi
+   `background:transparent !important`, retiré le 21/08/2026 car il écrasait
+   également les surlignages RTE légitimes (même mécanisme technique qu'un
+   résidu de collage — un `style="background-color:…"` inline — donc pas de
+   moyen simple de distinguer les deux en CSS pur). Leçon : toute nouvelle
+   règle défensive touchant `background` dans ces conteneurs doit être
+   scopée le plus finement possible, jamais un blanket `background:
+   transparent !important` sur `*`.
 5. **Le compteur de tâches d'un projet parent agrège ses sous-projets**
    (`projectTabHtml()` dans `02-render-root.js`), mais `openTaskCount()`
    lui-même (dans `01-core.js`) ne compte QUE les tâches directes d'un projet
@@ -236,6 +273,38 @@ texte brut : `seance.notes`, `seance.conclusions[]`, `page.notes`,
 7. **`localStorage` a une limite de taille** (~5-10 Mo selon navigateur) —
    `saveData()` échoue silencieusement (avec bannière d'erreur) si atteinte ;
    pas de mécanisme de compaction/archivage automatique à ce jour.
+8. **La case ⭐ Prioritaire d'une tâche utilise la classe `epv-task-priority`
+   même hors contexte EPV.** `taskRowHtml()` (`01-core.js`), réutilisé par
+   les brouillons de séance/page (`07-seance-page.js`), génère la case à
+   cocher priorité avec `class="epv-task-priority"` et les champs associés
+   `class="epv-prio-when"`/`class="epv-prio-date"` — un nommage hérité du
+   suivi continu (EPV) mais qui s'applique en réalité à toute tâche affichée
+   via ce template. Deux mécanismes de collecte coexistent, à ne pas
+   confondre : `epvCollectEntry()` (`12-reminder-epv.js`) relit ces champs en
+   bloc à la sauvegarde d'une entrée EPV ; pour les brouillons séance/page,
+   c'est une synchronisation live via le listener `change` délégué
+   (`14-event-delegation.js`, cherchez `.epv-task-priority`) qui met à jour
+   `currentDraftTasks()[i].priority` à chaque coche — corrigé le 21/08/2026
+   (la case était visuellement cochable mais son état n'était jamais collecté
+   avant cette date). Toute nouvelle fonctionnalité touchant la priorité
+   d'une tâche doit vérifier ces DEUX chemins de collecte séparément.
+9. **Calcul de la fenêtre de préparation d'un événement calendrier : logique
+   non triviale, à ne pas retoucher sans lire attentivement.** Deux endroits
+   distincts effectuent un calcul similaire mais pas identique :
+   `getPreparationReminders()` (`03-home.js`, teste seulement le mois
+   courant réel) et le `prepEvents` de `renderCalendar()` (`04-calendar.js`,
+   calcule toute la grille visuelle). Les deux distinguent la « portion
+   directe » (dans l'année propre de l'occurrence) de la « portion de
+   débordement » (dans l'année précédente), et traitent différemment les
+   événements récurrents (auto-référentiels : chaque onglet d'année est
+   traité comme une occurrence valide) des événements ponctuels (une seule
+   occurrence réelle, fixée à `event.year` — la portion de débordement
+   nécessite d'aller chercher l'événement `year+1` correspondant, sans quoi
+   elle n'apparaît nulle part). Corrigé le 21/08/2026 pour le cas ponctuel,
+   qui ne fonctionnait pas du tout avant cette date. Si l'une des deux
+   fonctions est modifiée, vérifier l'autre par script de fumée (voir
+   l'historique de session pour un exemple de script couvrant les 2 cas ×
+   2 années).
 
 ---
 
