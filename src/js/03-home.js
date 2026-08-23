@@ -150,7 +150,9 @@ function renderHome(){
           notes.map(n =>
             '<div class="quick-note-item'+(n.done?' done':'')+'">' +
               '<input type="checkbox" class="quick-note-check" data-action="toggle-quick-note" data-id="'+n.id+'"'+(n.done?' checked':'')+' title="Marquer comme fait">' +
-              '<span class="quick-note-text">'+escapeHtml(n.text)+'</span>' +
+              (state.editingQuickNoteId===n.id
+                ? '<input type="text" class="quick-note-edit-input" data-id="'+n.id+'" value="'+escapeHtml(n.text)+'">'
+                : '<span class="quick-note-text" data-action="edit-quick-note" data-id="'+n.id+'" title="Cliquer pour modifier" style="cursor:text;">'+escapeHtml(n.text)+'</span>') +
               '<span class="quick-note-date">'+fmtDate(n.createdAt)+'</span>' +
               '<button class="quick-note-del" data-action="delete-quick-note" data-id="'+n.id+'" title="Supprimer">✕</button>' +
             '</div>'
@@ -211,7 +213,7 @@ function renderHome(){
             '<span style="font-size:.85rem;">📋</span>' +
             '<div style="flex:1;">' +
               '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(r.event.text||rowLabel)+'</div>' +
-              '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(rowLabel)+' · Prévu en '+evMonth+' · Rappel '+before+(r.event.recurring||r.event.reminder.recurring?' · ↻ annuel':'')+'</div>' +
+              '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(rowLabel)+(r.event.responsable?' · '+escapeHtml(r.event.responsable):'')+' · Prévu en '+evMonth+' · Rappel '+before+(r.event.recurring||r.event.reminder.recurring?' · ↻ annuel':'')+'</div>' +
             '</div>' +
           '</div>';
         }).join('') +

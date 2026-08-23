@@ -47,50 +47,48 @@ function renderCalendar(standalone){
 
     const monthCells = CAL_MONTHS_SHORT.map((_,mi) => {
       const monthEvents = events.filter(e=>e.rowId===row.id && mi>=e.startMonth && mi<=e.endMonth);
-      // Preparation period events (lighter color, striped)
-      // Includes wrap-around into current year for recurring events' NEXT occurrence
-      const prepEvents = events.filter(e=>{
+      // Preparation period events (lighter color, striped).
+      // Looks at cal.events directly (not the year-prefiltered `events`) so
+      // that a non-recurring event dated for NEXT year, whose prep window
+      // bleeds backward into the tail of THIS year, is still found — the
+      // year-prefiltered `events` array would exclude it entirely.
+      const prepEvents = cal.events.filter(e=>{
         if(e.rowId!==row.id) return false;
         if(!(e.reminder && e.reminder.active)) return false;
+        if(monthEvents.find(ev=>ev.id===e.id)) return false; // don't draw prep over the event's own bar
         const isRecurring = e.recurring || (e.reminder && e.reminder.recurring);
         const offsetMonths = e.reminder.unit==='semaine' ? Math.ceil(e.reminder.amount/4.33) : Number(e.reminder.amount)||1;
-
         const remStart = e.startMonth - offsetMonths;
         const remEnd   = e.startMonth - 1;
 
-        const notOverlap = !monthEvents.find(ev=>ev.id===e.id);
-
-        // Case 1: prep fully within the current year
-        if(remStart >= 0 && remEnd >= 0){
-          return mi >= remStart && mi <= remEnd && notOverlap;
-        }
-
-        // Case 2: prep spans year boundary (remStart < 0, remEnd >= 0)
-        // → Part of prep is in current year: months [0, remEnd]
-        // → Part of prep was in previous year: not shown here
-        // → ALSO: if recurring, next year's occurrence preps [12+remStart, 11] in current year
-        if(remStart < 0 && remEnd >= 0){
-          // Current year's occurrence: months 0 to remEnd (e.g. Jan for Feb event)
-          if(mi >= 0 && mi <= remEnd && notOverlap) return true;
-          // Next year's occurrence (recurring): wrap from year end
-          if(isRecurring){
-            const wrapStart = 12 + remStart; // e.g. Nov=10 for 3-month prep before Feb
-            if(mi >= wrapStart && mi <= 11 && notOverlap) return true;
-          }
+        // Portion of the window landing in the SAME year as the occurrence
+        // being considered (e.g. remStart=-2,remEnd=0 → only month 0 lands
+        // in this year, the rest spilled into the previous year).
+        function directPortionMatches(){
+          if(remStart >= 0) return mi >= remStart && mi <= remEnd;
+          if(remEnd >= 0) return mi >= 0 && mi <= remEnd;
           return false;
         }
-
-        // Case 3: prep entirely in previous year (remEnd < 0)
-        // → if recurring, next year's occurrence wraps: [12+remStart, 11]
-        if(remStart < 0 && remEnd < 0){
-          if(isRecurring){
-            const wrapStart = 12 + remStart;
-            const wrapEnd   = 12 + remEnd;
-            return mi >= wrapStart && mi <= wrapEnd && notOverlap;
-          }
-          return false;
+        // Portion of the window that spilled backward into the year BEFORE
+        // the occurrence (e.g. remStart=-3,remEnd=-1 → all 3 months are in
+        // the previous year: [12+remStart, 12+remEnd]).
+        function bleedPortionMatches(){
+          if(remStart >= 0) return false;
+          const wrapStart = 12 + remStart;
+          const wrapEnd = remEnd >= 0 ? 11 : 12 + remEnd;
+          return mi >= wrapStart && mi <= wrapEnd;
         }
 
+        if(isRecurring){
+          // Recurring events repeat identically every year: this tab is
+          // simultaneously "this occurrence's year" (direct portion) and
+          // "the year before next occurrence" (bleed portion for the NEXT
+          // year's prep, landing in this year's tail months).
+          return directPortionMatches() || bleedPortionMatches();
+        }
+        // Non-recurring: only one real occurrence, fixed to e.year.
+        if(e.year === year) return directPortionMatches();
+        if(e.year === year + 1) return bleedPortionMatches();
         return false;
       });
 
@@ -124,7 +122,8 @@ function renderCalendar(standalone){
           cellStyle = 'background:'+bg+';padding:4px 6px;cursor:pointer;border-radius:'+(isSolo?'8px':'8px 0 0 8px')+';';
           cellContent += '<span style="font-size:.7rem;font-weight:500;line-height:1.3;word-break:break-word;display:block;">' +
             escapeHtml(ev.text||'') + (ev.recurring ? ' <span title="Rappel annuel" style="opacity:.7;">↻</span>' : '') +
-          '</span>';
+          '</span>' +
+          (ev.responsable ? '<span style="font-size:.62rem;opacity:.7;display:block;margin-top:1px;">'+escapeHtml(ev.responsable)+'</span>' : '');
           cellAction = 'data-action="edit-cal-event" data-id="'+ev.id+'"';
         }
       });
@@ -150,11 +149,6 @@ function renderCalendar(standalone){
     CAL_MONTHS_SHORT.map((m,i)=>'<th class="cal-th-month col-month'+(i===currentMonth?' current-month':'')+'">' + m + '</th>').join('') +
   '</tr></thead>';
 
-  const legend = '<div class="cal-legend">' +
-    CAL_COLORS.map(c=>'<span class="cal-legend-chip"><span class="cal-legend-swatch '+c.key+'"></span>'+c.label+'</span>').join('') +
-    '<span class="cal-legend-chip" style="margin-left:8px;"><span style="font-size:.82rem;">↻</span>Rappel annuel</span>' +
-  '</div>';
-
   const emptyHint = rows.length===0
     ? '<div class="empty-state small" style="margin-top:12px;"><p style="margin:0;">Ajoutez des groupes avec le bouton <strong>+ Ajouter un groupe</strong> pour commencer à planifier votre année.</p></div>'
     : '';
@@ -171,12 +165,12 @@ function renderCalendar(standalone){
     return '<p class="eyebrow">Planning</p>' +
       '<h1 class="page-title">Calendrier annuel</h1>' +
       '<p class="page-sub">Cliquez sur une cellule pour ajouter un événement · <strong>↻</strong> = rappel annuel automatique · Cliquez sur un intitulé de groupe pour le modifier</p>' +
-      controls + legend +
+      controls +
       '<div class="cal-wrap"><table class="cal-table">' + thead + '<tbody>' + tableBody + '</tbody></table></div>' +
       emptyHint;
   }
   // Inline version for home
-  return controls + legend +
+  return controls +
     '<div class="cal-wrap"><table class="cal-table">' + thead + '<tbody>' + tableBody + '</tbody></table></div>' +
     emptyHint;
 }
@@ -192,6 +186,7 @@ function renderCalEventModalInner(){
 
   return '<h3>'+title+'</h3>' +
     '<div class="form-row"><label>Texte</label><input type="text" id="ce-text" value="'+escapeHtml(ev.text||'')+'" placeholder="Ex : Envoi questionnaire, Démarrage pilote…"></div>' +
+    '<div class="form-row"><label>Responsable</label><input type="text" id="ce-responsable" value="'+escapeHtml(ev.responsable||'')+'" placeholder="Ex : JA, NB…"></div>' +
     '<div class="form-row"><label>Groupe de projet</label><select id="ce-row"><option value="">— Choisir —</option>' + rows.map(r=>'<option value="'+r.id+'"'+((ev.rowId||m.rowId)===r.id?' selected':'')+'>'+escapeHtml(r.label)+'</option>').join('') + '</select></div>' +
     '<div class="form-grid2">' +
       '<div class="form-row"><label>Mois de début</label><select id="ce-start">' + months.map((mo,i)=>'<option value="'+i+'"'+(ev.startMonth===i?' selected':'')+'>'+mo+'</option>').join('') + '</select></div>' +
@@ -273,6 +268,7 @@ function renderCalRowModalInner(){
         '</label>' +
         '<div id="cr-ev-fields" style="display:none;margin-top:14px;">' +
           '<div class="form-row"><label>Texte de l\'événement</label><input type="text" id="cr-ev-text" placeholder="Ex : Envoi questionnaire, Démarrage pilote…"></div>' +
+          '<div class="form-row"><label>Responsable</label><input type="text" id="cr-ev-responsable" placeholder="Ex : JA, NB…"></div>' +
           '<div class="form-grid2">' +
             '<div class="form-row"><label>Mois de début</label><select id="cr-ev-start">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
             '<div class="form-row"><label>Mois de fin</label><select id="cr-ev-end">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +

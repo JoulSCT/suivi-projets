@@ -45,6 +45,7 @@ document.getElementById('app').addEventListener('click', function(e){
         const addEv = document.getElementById('cr-add-event');
         if(addEv && addEv.checked){
           const evText = (document.getElementById('cr-ev-text').value||'').trim();
+          const evResponsable = (document.getElementById('cr-ev-responsable').value||'').trim();
           const evStart = Number(document.getElementById('cr-ev-start').value);
           const evEnd = Math.max(evStart, Number(document.getElementById('cr-ev-end').value));
           const evYearEl = document.getElementById('cr-ev-year');
@@ -58,7 +59,7 @@ document.getElementById('app').addEventListener('click', function(e){
             unit: document.getElementById('cr-rem-unit').value||'mois',
             recurring: document.getElementById('cr-rem-recurring').checked
           } : { active:false };
-          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:evYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, recurring:evRecurring, reminder:evReminder });
+          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:evYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, responsable:evResponsable, recurring:evRecurring, reminder:evReminder });
         }
       }
       state.modal=null; persistAndRender(); break;
@@ -91,6 +92,7 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'save-cal-event': {
       const m2 = state.modal;
       const text = document.getElementById('ce-text').value.trim();
+      const responsable = document.getElementById('ce-responsable').value.trim();
       const rowSelect = document.getElementById('ce-row');
       const rowId4 = (rowSelect && rowSelect.value) || m2.rowId || m2.event.rowId;
       const start = Number(document.getElementById('ce-start').value);
@@ -107,10 +109,10 @@ document.getElementById('app').addEventListener('click', function(e){
       } : { active: false };
       if(!rowId4) { state.modal=null; render(); break; }
       if(m2.isNew){
-        state.data.calendar.events.push({ id:uid(), rowId:rowId4, year:yearVal, startMonth:start, endMonth:end, colorClass, text, recurring, reminder });
+        state.data.calendar.events.push({ id:uid(), rowId:rowId4, year:yearVal, startMonth:start, endMonth:end, colorClass, text, responsable, recurring, reminder });
       } else {
         const ev3 = state.data.calendar.events.find(x=>x.id===m2.event.id);
-        if(ev3){ ev3.text=text; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.rowId=rowId4; ev3.recurring=recurring; ev3.reminder=reminder; }
+        if(ev3){ ev3.text=text; ev3.responsable=responsable; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.rowId=rowId4; ev3.recurring=recurring; ev3.reminder=reminder; }
       }
       state.modal=null; persistAndRender(); break;
     }
@@ -136,6 +138,13 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'toggle-quick-note': {
       const note = (state.data.quickNotes||[]).find(n=>n.id===id);
       if(note){ note.done = !note.done; persistAndRender(); }
+      break;
+    }
+    case 'edit-quick-note': {
+      state.editingQuickNoteId = id;
+      render();
+      const editInp = document.querySelector('.quick-note-edit-input[data-id="'+id+'"]');
+      if(editInp){ editInp.focus(); editInp.select(); }
       break;
     }
     case 'delete-quick-note': {
@@ -846,6 +855,14 @@ document.getElementById('app').addEventListener('change', function(e){
     if(note){ note.done = t.checked; persistAndRender(); }
     return;
   }
+  if(t.matches('.quick-note-edit-input')){
+    const note = (state.data.quickNotes||[]).find(n=>n.id===t.getAttribute('data-id'));
+    const newText = t.value.trim();
+    if(note && newText) note.text = newText;
+    state.editingQuickNoteId = null;
+    persistAndRender();
+    return;
+  }
 
   if(t.matches('[data-field="task-statut"]') || t.matches('[data-field="task-date"]')){
     const arr = currentDraftTasks();
@@ -967,6 +984,15 @@ document.getElementById('app').addEventListener('keydown', function(e){
   }
   if(e.key === 'Enter' && e.target.id === 'direct-task-desc'){
     const addBtn = document.querySelector('[data-action="add-direct-task"]'); if(addBtn) addBtn.click();
+    return;
+  }
+  if(e.key === 'Enter' && e.target.classList.contains('quick-note-edit-input')){
+    e.target.blur();
+    return;
+  }
+  if(e.key === 'Escape' && e.target.classList.contains('quick-note-edit-input')){
+    state.editingQuickNoteId = null;
+    render();
     return;
   }
   if(e.key === 'Enter' && e.target.id === 'qn-input'){
