@@ -556,7 +556,7 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function isOverdue(task){ return task.echeance && !DONE_STATUSES.includes(task.statut) && task.echeance < todayStr(); }
-function defaultData(){ return { projects: [], seances: {}, pages: {}, quickNotes: [], calendar: { rows:[], events:[] }, evolvingPV: {} }; }
+function defaultData(){ return { projects: [], seances: {}, pages: {}, quickNotes: [], calendar: { rows:[], events:[], cellNotes:[] }, evolvingPV: {} }; }
 
 function getProject(id){ return state.data.projects.find(p => p.id === id); }
 function getChildren(id){ return state.data.projects.filter(p => p.parentId === id); }
@@ -671,9 +671,10 @@ async function loadData(){
     parsed.seances = parsed.seances || {};
     parsed.pages = parsed.pages || {};
     parsed.quickNotes = parsed.quickNotes || [];
-    parsed.calendar = parsed.calendar || { rows:[], events:[] };
+    parsed.calendar = parsed.calendar || { rows:[], events:[], cellNotes:[] };
     parsed.calendar.rows = parsed.calendar.rows || [];
     parsed.calendar.events = parsed.calendar.events || [];
+    parsed.calendar.cellNotes = parsed.calendar.cellNotes || [];
     parsed.evolvingPV = parsed.evolvingPV || {};
     state.data = parsed;
   }catch(e){
@@ -1159,7 +1160,8 @@ function renderCalendar(standalone){
   const grouped = categories.map(cat => ({ cat, rows: rows.filter(r=>r.category===cat) }));
 
   function renderRow(row){
-    const labelCell = '<td class="cal-row-label col-label" data-action="edit-cal-row" data-id="'+row.id+'" title="Modifier ce groupe" style="cursor:pointer;">' +
+    const definingEvent = cal.events.find(e=>e.rowId===row.id);
+    const labelCell = '<td class="cal-row-label col-label" data-action="edit-cal-event" data-id="'+(definingEvent?definingEvent.id:'')+'" title="Modifier cet événement" style="cursor:pointer;">' +
       '<div class="cal-row-label-inner">' +
         escapeHtml(row.label) +
         (row.sub ? '<span class="cal-row-label-sub">'+escapeHtml(row.sub)+'</span>' : '') +
@@ -1213,9 +1215,17 @@ function renderCalendar(standalone){
         return false;
       });
 
+      const cellNote = (cal.cellNotes||[]).find(n=>n.rowId===row.id && n.year===year && n.month===mi);
+
       let cellContent = '';
       let cellStyle = '';
-      let cellAction = 'data-action="add-cal-event" data-row-id="'+row.id+'" data-month="'+mi+'"';
+      let cellAction = cellNote
+        ? 'data-action="edit-cal-note" data-id="'+cellNote.id+'"'
+        : 'data-action="add-cal-note" data-row-id="'+row.id+'" data-month="'+mi+'" data-year="'+year+'"';
+      if(cellNote){
+        cellStyle = 'cursor:pointer;';
+        cellContent = '<div style="min-height:42px;display:flex;align-items:center;padding:4px 6px;font-size:.72rem;color:var(--ink-soft);font-style:italic;">'+escapeHtml(cellNote.text)+'</div>';
+      }
 
       // Only show prep from the FIRST matching event per cell to avoid color conflicts
       const firstPrepEv = prepEvents[0] || null;
@@ -1249,7 +1259,7 @@ function renderCalendar(standalone){
         }
       });
 
-      if(monthEvents.length===0 && prepEvents.length===0){
+      if(monthEvents.length===0 && prepEvents.length===0 && !cellNote){
         cellContent = '<div class="cal-add-hint">+</div>';
       }
       return '<td class="cal-cell'+(mi===currentMonth?' current-month-cell':'')+'" style="'+cellStyle+'" '+cellAction+'>' + cellContent + '</td>';
@@ -1266,26 +1276,26 @@ function renderCalendar(standalone){
   });
 
   const thead = '<thead><tr>' +
-    '<th class="cal-th-label col-label">Groupe de projet</th>' +
+    '<th class="cal-th-label col-label">Événement</th>' +
     CAL_MONTHS_SHORT.map((m,i)=>'<th class="cal-th-month col-month'+(i===currentMonth?' current-month':'')+'">' + m + '</th>').join('') +
   '</tr></thead>';
 
   const emptyHint = rows.length===0
-    ? '<div class="empty-state small" style="margin-top:12px;"><p style="margin:0;">Ajoutez des groupes avec le bouton <strong>+ Ajouter un groupe</strong> pour commencer à planifier votre année.</p></div>'
+    ? '<div class="empty-state small" style="margin-top:12px;"><p style="margin:0;">Ajoutez un événement avec le bouton <strong>+ Nouvel événement</strong> pour commencer à planifier votre année.</p></div>'
     : '';
 
   const controls = '<div class="cal-year-bar">' +
     '<button class="cal-year-btn" data-action="cal-prev-year">← '+(year-1)+'</button>' +
     '<span class="cal-year-display">'+year+'</span>' +
     '<button class="cal-year-btn" data-action="cal-next-year">'+(year+1)+' →</button>' +
-    '<button class="btn btn-primary no-print" data-action="add-cal-row" style="margin-left:10px;font-size:.78rem;padding:6px 12px;">+ Groupe</button>' +
+    '<button class="btn btn-primary no-print" data-action="add-cal-event-standalone" style="margin-left:10px;font-size:.78rem;padding:6px 12px;">+ Nouvel événement</button>' +
     '<button class="btn no-print" data-action="print-pv" style="font-size:.78rem;padding:6px 12px;">Imprimer</button>' +
   '</div>';
 
   if(standalone){
     return '<p class="eyebrow">Planning</p>' +
       '<h1 class="page-title">Calendrier annuel</h1>' +
-      '<p class="page-sub">Cliquez sur une cellule pour ajouter un événement · <strong>↻</strong> = rappel annuel automatique · Cliquez sur un intitulé de groupe pour le modifier</p>' +
+      '<p class="page-sub">Cliquez sur une case pour y ajouter une note libre · <strong>↻</strong> = rappel annuel automatique · Cliquez sur un événement pour le modifier</p>' +
       controls +
       '<div class="cal-wrap"><table class="cal-table">' + thead + '<tbody>' + tableBody + '</tbody></table></div>' +
       emptyHint;
@@ -1301,6 +1311,8 @@ function renderCalEventModalInner(){
   const ev = m.event || {};
   const rem = ev.reminder || {};
   const rows = state.data.calendar.rows;
+  const currentRow = ev.rowId ? rows.find(r=>r.id===ev.rowId) : null;
+  const existingCategories = [...new Set(rows.map(r=>r.category).filter(Boolean))];
   const months = CAL_MONTHS_SHORT;
   const title = m.isNew ? 'Nouvel événement' : 'Modifier l\'événement';
   const hasReminder = rem.active === true;
@@ -1308,7 +1320,9 @@ function renderCalEventModalInner(){
   return '<h3>'+title+'</h3>' +
     '<div class="form-row"><label>Texte</label><input type="text" id="ce-text" value="'+escapeHtml(ev.text||'')+'" placeholder="Ex : Envoi questionnaire, Démarrage pilote…"></div>' +
     '<div class="form-row"><label>Responsable</label><input type="text" id="ce-responsable" value="'+escapeHtml(ev.responsable||'')+'" placeholder="Ex : JA, NB…"></div>' +
-    '<div class="form-row"><label>Groupe de projet</label><select id="ce-row"><option value="">— Choisir —</option>' + rows.map(r=>'<option value="'+r.id+'"'+((ev.rowId||m.rowId)===r.id?' selected':'')+'>'+escapeHtml(r.label)+'</option>').join('') + '</select></div>' +
+    '<div class="form-row"><label>Catégorie</label><input type="text" id="ce-category" list="ce-category-list" value="'+escapeHtml((currentRow&&currentRow.category)||'')+'" placeholder="Ex : HUMANITAIRE, ADMINISTRATIF… (facultatif)">' +
+      '<datalist id="ce-category-list">' + existingCategories.map(c=>'<option value="'+escapeHtml(c)+'">').join('') + '</datalist>' +
+    '</div>' +
     '<div class="form-grid2">' +
       '<div class="form-row"><label>Mois de début</label><select id="ce-start">' + months.map((mo,i)=>'<option value="'+i+'"'+(ev.startMonth===i?' selected':'')+'>'+mo+'</option>').join('') + '</select></div>' +
       '<div class="form-row"><label>Mois de fin</label><select id="ce-end">' + months.map((mo,i)=>'<option value="'+i+'"'+(ev.endMonth===i?' selected':'')+'>'+mo+'</option>').join('') + '</select></div>' +
@@ -1359,80 +1373,19 @@ function renderCalEventModalInner(){
     '</div>';
 }
 
-function renderCalRowModalInner(){
-  const row = state.modal.row || {};
-  const isEdit = !!row.id;
-  const categories = [...new Set((state.data.calendar.rows||[]).map(r=>r.category||'').filter(Boolean))];
-  const months = CAL_MONTHS_SHORT;
+function renderCalNoteModalInner(){
+  const m = state.modal;
+  const note = m.note || {};
+  const row = state.data.calendar.rows.find(r=>r.id===note.rowId);
+  const rowLabel = row ? row.label : '';
+  const monthLabel = CAL_MONTHS_SHORT[note.month] || '';
 
-  return '<h3>'+(isEdit?'Modifier le groupe':'Nouveau groupe'+(row.label?' : '+escapeHtml(row.label):''))+'</h3>' +
-
-    /* ---- Row info ---- */
-    '<div style="background:var(--blush);border-radius:8px;padding:14px 16px;margin-bottom:14px;">' +
-      '<p style="font-family:var(--font-mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);margin:0 0 10px;">Groupe de projet</p>' +
-      '<div class="form-row"><label>Intitulé</label><input type="text" id="cr-label" value="'+escapeHtml(row.label||'')+'" placeholder="Ex : Projet Kubuta, Atelier numérique…" autofocus></div>' +
-      '<div class="form-grid2">' +
-        '<div class="form-row"><label>Sous-titre / responsables</label><input type="text" id="cr-sub" value="'+escapeHtml(row.sub||'')+'" placeholder="Ex : JA/NB"></div>' +
-        '<div class="form-row"><label>Catégorie</label>' +
-          '<input type="text" id="cr-cat" value="'+escapeHtml(row.category||'')+'" placeholder="Ex : HUMANITAIRE" list="cr-cat-list">' +
-          '<datalist id="cr-cat-list">'+categories.map(c=>'<option value="'+escapeHtml(c)+'">').join('')+'</datalist>' +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-
-    /* ---- Event creation (only for new rows) ---- */
-    (!isEdit ? (
-      '<div style="border:1px solid var(--paper-line);border-radius:8px;padding:14px 16px;background:#FAFCFF;">' +
-        '<label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:.86rem;color:var(--ink);font-family:var(--font-body);text-transform:none;letter-spacing:0;margin-bottom:0;" id="ev-toggle-label">' +
-          '<input type="checkbox" id="cr-add-event" style="width:15px;height:15px;accent-color:var(--navy);" onchange="document.getElementById(\'cr-ev-fields\').style.display=this.checked?\'block\':\'none\'">' +
-          '<span><strong>Ajouter un premier événement sur ce groupe</strong></span>' +
-        '</label>' +
-        '<div id="cr-ev-fields" style="display:none;margin-top:14px;">' +
-          '<div class="form-row"><label>Texte de l\'événement</label><input type="text" id="cr-ev-text" placeholder="Ex : Envoi questionnaire, Démarrage pilote…"></div>' +
-          '<div class="form-row"><label>Responsable</label><input type="text" id="cr-ev-responsable" placeholder="Ex : JA, NB…"></div>' +
-          '<div class="form-grid2">' +
-            '<div class="form-row"><label>Mois de début</label><select id="cr-ev-start">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
-            '<div class="form-row"><label>Mois de fin</label><select id="cr-ev-end">'+months.map((mo,i)=>'<option value="'+i+'">'+mo+'</option>').join('')+'</select></div>' +
-          '</div>' +
-          '<div class="form-row"><label>Année</label><input type="number" id="cr-ev-year" value="'+state.calYear+'" min="2000" max="2100" style="width:120px;"></div>' +
-          '<div class="form-row"><label>Couleur</label>' +
-            '<div style="display:flex;gap:7px;flex-wrap:wrap;" id="cr-ev-color-picker">' +
-              CAL_COLORS.map(c=>'<button type="button" class="cal-legend-swatch '+c.key+'" style="width:26px;height:26px;border-radius:6px;border:3px solid transparent;cursor:pointer;transition:transform .1s;" data-row-color="'+c.key+'" title="'+c.label+'"></button>').join('') +
-            '</div>' +
-            '<input type="hidden" id="cr-ev-color" value="ec-rose">' +
-          '</div>' +
-          '<div class="form-row" style="background:var(--blush);border-radius:7px;padding:10px 12px;">' +
-            '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;color:var(--ink);font-family:var(--font-body);">' +
-              '<input type="checkbox" id="cr-ev-recurring" style="width:14px;height:14px;accent-color:var(--navy);">' +
-              '↻ Rappel annuel (répéter chaque année)' +
-            '</label>' +
-          '</div>' +
-          '<div style="border:1px solid var(--paper-line);border-radius:7px;padding:12px;margin-top:8px;">' +
-            '<label style="display:flex;align-items:center;gap:9px;cursor:pointer;font-size:.82rem;color:var(--ink);font-family:var(--font-body);text-transform:none;letter-spacing:0;margin-bottom:0;">' +
-              '<input type="checkbox" id="cr-ev-reminder" style="width:14px;height:14px;accent-color:var(--seal-gold);" onchange="document.getElementById(\'cr-rem-fields\').style.display=this.checked?\'block\':\'none\'">' +
-              '🔔 Ajouter un rappel de préparation' +
-            '</label>' +
-            '<div id="cr-rem-fields" style="display:none;margin-top:10px;">' +
-              '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
-                '<span style="font-family:var(--font-mono);font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);">Combien de temps avant ?</span>' +
-                '<input type="number" id="cr-rem-amount" min="1" max="52" value="1" style="width:56px;padding:5px 8px;border:1px solid var(--paper-line);border-radius:6px;font-family:inherit;font-size:.84rem;">' +
-                '<select id="cr-rem-unit" style="padding:5px 10px;border:1px solid var(--paper-line);border-radius:6px;font-family:inherit;font-size:.84rem;">' +
-                  '<option value="semaine">semaine(s)</option><option value="mois" selected>mois</option>' +
-                '</select>' +
-              '</div>' +
-              '<label style="display:flex;align-items:center;gap:7px;cursor:pointer;margin-top:8px;font-size:.8rem;color:var(--ink-soft);font-family:var(--font-body);text-transform:none;letter-spacing:0;">' +
-                '<input type="checkbox" id="cr-rem-recurring" style="width:13px;height:13px;accent-color:var(--seal-gold);">' +
-                '↻ Ce rappel est lui aussi annuel' +
-              '</label>' +
-            '</div>' +
-          '</div>' +
-        '</div>' +
-      '</div>'
-    ) : '') +
-
+  return '<h3>'+(m.isNew ? 'Ajouter une note' : 'Modifier la note')+'</h3>' +
+    '<p style="font-family:var(--font-mono);font-size:.7rem;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-soft);margin:0 0 12px;">'+escapeHtml(rowLabel)+' · '+monthLabel+' '+(note.year||'')+'</p>' +
+    '<div class="form-row"><label>Texte libre</label><textarea id="cn-text" rows="3" placeholder="Ex : créer formulaire, envoi formulaire…" autofocus>'+escapeHtml(note.text||'')+'</textarea></div>' +
     '<div class="form-actions">' +
-      '<button class="btn btn-primary" data-action="save-cal-row">Enregistrer</button>' +
-      (isEdit ? '<button class="btn btn-danger" data-action="delete-cal-row" data-id="'+(row.id||'')+'">Supprimer le groupe</button>' : '') +
+      '<button class="btn btn-primary" data-action="save-cal-note">Enregistrer</button>' +
+      (!m.isNew ? '<button class="btn btn-danger" data-action="delete-cal-note">Supprimer</button>' : '') +
       '<button class="btn btn-ghost" data-action="close-modal">Annuler</button>' +
     '</div>';
 }
@@ -2330,7 +2283,7 @@ function renderModal(){
   else if(state.modal.type==='edit-task'){ inner = renderEditTaskModalInner(); wide = ' wide'; }
   else if(state.modal.type==='confirm-delete'){ inner = renderConfirmDeleteModalInner(); }
   else if(state.modal.type==='cal-event'){ inner = renderCalEventModalInner(); }
-  else if(state.modal.type==='cal-row'){ inner = renderCalRowModalInner(); }
+  else if(state.modal.type==='cal-note'){ inner = renderCalNoteModalInner(); }
   else if(state.modal.type==='vigilance'){ inner = renderVigilanceModalInner(); }
   else if(state.modal.type==='development'){ inner = renderDevelopmentModalInner(); }
   else if(state.modal.type==='priority-schedule'){ inner = renderPriorityScheduleModalInner(); }
@@ -2625,18 +2578,6 @@ function attachDynamicValues(){
           picker.querySelectorAll('[data-color]').forEach(b=>b.style.borderColor='transparent');
           btn.style.borderColor='var(--navy)';
           document.getElementById('ce-color').value = btn.getAttribute('data-color');
-        });
-      });
-    }
-  }
-  if(state.modal && state.modal.type==='cal-row'){
-    const picker = document.getElementById('cr-ev-color-picker');
-    if(picker){
-      picker.querySelectorAll('[data-row-color]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          picker.querySelectorAll('[data-row-color]').forEach(b=>b.style.borderColor='transparent');
-          btn.style.borderColor='var(--navy)';
-          document.getElementById('cr-ev-color').value = btn.getAttribute('data-row-color');
         });
       });
     }
@@ -3115,10 +3056,11 @@ function importFullBackup(pkg){
   state.data.pages = {};
   state.data.evolvingPV = {};
   state.data.quickNotes = [];
-  state.data.calendar = { rows: [], events: [] };
-  if(pkg.calendar && (pkg.calendar.rows || pkg.calendar.events)){
+  state.data.calendar = { rows: [], events: [], cellNotes: [] };
+  if(pkg.calendar && (pkg.calendar.rows || pkg.calendar.events || pkg.calendar.cellNotes)){
     state.data.calendar.rows = pkg.calendar.rows || [];
     state.data.calendar.events = pkg.calendar.events || [];
+    state.data.calendar.cellNotes = pkg.calendar.cellNotes || [];
   }
   // Quick notes
   if(Array.isArray(pkg.quickNotes)) state.data.quickNotes = pkg.quickNotes;
@@ -3737,68 +3679,41 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'cal-prev-year': state.calYear--; render(); break;
     case 'cal-next-year': state.calYear++; render(); break;
 
-    case 'add-cal-row':
-      state.modal = { type:'cal-row', row:{} }; render(); break;
-    case 'edit-cal-row': {
-      const rowToEdit = state.data.calendar.rows.find(r=>r.id===id);
-      if(rowToEdit) { state.modal = { type:'cal-row', row:{...rowToEdit} }; render(); }
+    case 'add-cal-event-standalone':
+      state.modal = { type:'cal-event', isNew:true, rowId:null, event:{ colorClass:'ec-rose', text:'', year:state.calYear } };
+      render(); break;
+    case 'add-cal-note': {
+      const noteRowId = el.getAttribute('data-row-id');
+      const noteMonth = Number(el.getAttribute('data-month'));
+      const noteYear = Number(el.getAttribute('data-year'));
+      if(e.target.closest('.cal-event')) break;
+      state.modal = { type:'cal-note', isNew:true, note:{ rowId:noteRowId, month:noteMonth, year:noteYear, text:'' } };
+      render(); break;
+    }
+    case 'edit-cal-note': {
+      const noteToEdit = (state.data.calendar.cellNotes||[]).find(n=>n.id===id);
+      if(noteToEdit) { state.modal = { type:'cal-note', isNew:false, note:{...noteToEdit} }; render(); }
       break;
     }
-    case 'save-cal-row': {
-      const label = document.getElementById('cr-label').value.trim();
-      if(!label) break;
-      const sub = document.getElementById('cr-sub').value.trim();
-      const cat = document.getElementById('cr-cat').value.trim();
-      const existing = state.modal.row && state.modal.row.id;
-      let rowId5;
-      if(existing){
-        const r = state.data.calendar.rows.find(x=>x.id===existing);
-        if(r){ r.label=label; r.sub=sub; r.category=cat; }
-        rowId5 = existing;
+    case 'save-cal-note': {
+      const noteText = document.getElementById('cn-text').value.trim();
+      const nm = state.modal.note;
+      if(!state.data.calendar.cellNotes) state.data.calendar.cellNotes = [];
+      if(!noteText){
+        // Empty text: remove the note if it existed, otherwise just close.
+        state.data.calendar.cellNotes = state.data.calendar.cellNotes.filter(n=>n.id!==nm.id);
+      } else if(state.modal.isNew){
+        state.data.calendar.cellNotes.push({ id:uid(), rowId:nm.rowId, year:nm.year, month:nm.month, text:noteText });
       } else {
-        rowId5 = uid();
-        state.data.calendar.rows.push({ id:rowId5, label, sub, category:cat });
-        // Also create event if checked
-        const addEv = document.getElementById('cr-add-event');
-        if(addEv && addEv.checked){
-          const evText = (document.getElementById('cr-ev-text').value||'').trim();
-          const evResponsable = (document.getElementById('cr-ev-responsable').value||'').trim();
-          const evStart = Number(document.getElementById('cr-ev-start').value);
-          const evEnd = Math.max(evStart, Number(document.getElementById('cr-ev-end').value));
-          const evYearEl = document.getElementById('cr-ev-year');
-          const evYear = (evYearEl && Number(evYearEl.value)) || state.calYear;
-          const evColor = document.getElementById('cr-ev-color').value || 'ec-rose';
-          const evRecurring = document.getElementById('cr-ev-recurring').checked;
-          const evRemOn = document.getElementById('cr-ev-reminder').checked;
-          const evReminder = evRemOn ? {
-            active:true,
-            amount: Number(document.getElementById('cr-rem-amount').value)||1,
-            unit: document.getElementById('cr-rem-unit').value||'mois',
-            recurring: document.getElementById('cr-rem-recurring').checked
-          } : { active:false };
-          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:evYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, responsable:evResponsable, recurring:evRecurring, reminder:evReminder });
-        }
+        const n = state.data.calendar.cellNotes.find(x=>x.id===nm.id);
+        if(n) n.text = noteText;
       }
       state.modal=null; persistAndRender(); break;
     }
-    case 'delete-cal-row': {
-      const rowId2 = el.getAttribute('data-id') || (state.modal.row && state.modal.row.id);
-      state.modal = { type:'confirm-delete', message:'Supprimer cette ligne et tous ses événements ?',
-        pendingAction:()=>{
-          state.data.calendar.rows = state.data.calendar.rows.filter(r=>r.id!==rowId2);
-          state.data.calendar.events = state.data.calendar.events.filter(e=>e.rowId!==rowId2);
-          state.modal=null; persistAndRender();
-        }
-      };
-      render(); break;
-    }
-    case 'add-cal-event': {
-      const rowId3 = el.getAttribute('data-row-id');
-      const month3 = Number(el.getAttribute('data-month'));
-      // Don't open if clicking an event inside the cell
-      if(e.target.closest('.cal-event')) break;
-      state.modal = { type:'cal-event', isNew:true, rowId:rowId3, event:{ rowId:rowId3, startMonth:month3, endMonth:month3, colorClass:'ec-rose', text:'', year:state.calYear } };
-      render(); break;
+    case 'delete-cal-note': {
+      const nm2 = state.modal.note;
+      state.data.calendar.cellNotes = (state.data.calendar.cellNotes||[]).filter(n=>n.id!==nm2.id);
+      state.modal=null; persistAndRender(); break;
     }
     case 'edit-cal-event': {
       e.stopPropagation();
@@ -3810,8 +3725,7 @@ document.getElementById('app').addEventListener('click', function(e){
       const m2 = state.modal;
       const text = document.getElementById('ce-text').value.trim();
       const responsable = document.getElementById('ce-responsable').value.trim();
-      const rowSelect = document.getElementById('ce-row');
-      const rowId4 = (rowSelect && rowSelect.value) || m2.rowId || m2.event.rowId;
+      const category = document.getElementById('ce-category').value.trim();
       const start = Number(document.getElementById('ce-start').value);
       const end = Math.max(start, Number(document.getElementById('ce-end').value));
       const yearVal = Number(document.getElementById('ce-year').value) || state.calYear;
@@ -3824,19 +3738,37 @@ document.getElementById('app').addEventListener('click', function(e){
         unit: document.getElementById('ce-rem-unit').value||'mois',
         recurring: document.getElementById('ce-rem-recurring') ? document.getElementById('ce-rem-recurring').checked : false
       } : { active: false };
-      if(!rowId4) { state.modal=null; render(); break; }
+      if(!text) { state.modal=null; render(); break; }
       if(m2.isNew){
-        state.data.calendar.events.push({ id:uid(), rowId:rowId4, year:yearVal, startMonth:start, endMonth:end, colorClass, text, responsable, recurring, reminder });
+        // No existing row to attach to: create one to match this event
+        // (a row is always 1:1 with its defining event — no separate
+        // "group creation" step anymore).
+        const newRowId = uid();
+        state.data.calendar.rows.push({ id:newRowId, label:text, sub:responsable, category });
+        state.data.calendar.events.push({ id:uid(), rowId:newRowId, year:yearVal, startMonth:start, endMonth:end, colorClass, text, responsable, recurring, reminder });
       } else {
         const ev3 = state.data.calendar.events.find(x=>x.id===m2.event.id);
-        if(ev3){ ev3.text=text; ev3.responsable=responsable; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.rowId=rowId4; ev3.recurring=recurring; ev3.reminder=reminder; }
+        if(ev3){
+          ev3.text=text; ev3.responsable=responsable; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.recurring=recurring; ev3.reminder=reminder;
+          const r = state.data.calendar.rows.find(x=>x.id===ev3.rowId);
+          if(r){ r.label=text; r.sub=responsable; r.category=category; }
+        }
       }
       state.modal=null; persistAndRender(); break;
     }
     case 'delete-cal-event': {
       const evId = state.modal.event && state.modal.event.id;
-      state.modal = { type:'confirm-delete', message:'Supprimer cet événement ?',
-        pendingAction:()=>{ state.data.calendar.events=state.data.calendar.events.filter(x=>x.id!==evId); state.modal=null; persistAndRender(); }
+      state.modal = { type:'confirm-delete', message:'Supprimer cet événement et toutes ses notes ?',
+        pendingAction:()=>{
+          const delEv = state.data.calendar.events.find(x=>x.id===evId);
+          const delRowId = delEv && delEv.rowId;
+          state.data.calendar.events = state.data.calendar.events.filter(x=>x.id!==evId);
+          if(delRowId){
+            state.data.calendar.rows = state.data.calendar.rows.filter(r=>r.id!==delRowId);
+            state.data.calendar.cellNotes = (state.data.calendar.cellNotes||[]).filter(n=>n.rowId!==delRowId);
+          }
+          state.modal=null; persistAndRender();
+        }
       };
       render(); break;
     }

@@ -124,16 +124,23 @@ utiliser `setTaskStatut(task, newStatut)` pour changer un statut (gère
 { id, date, notes: html, conclusions: [html], taches: [Task] }
 ```
 
-**CalendarRow** (« groupe de projet » du calendrier annuel — étiquette
-libre, **indépendante** de `Project` ; voir §4 pour la justification) :
+**CalendarRow** (une ligne du calendrier annuel — **toujours 1:1 avec un
+CalendarEvent** depuis le 21/08/2026 : créée/mise à jour/supprimée
+automatiquement en même temps que son événement définissant, jamais gérée
+séparément) :
 ```js
 { id, label, sub, category }
+// label et sub sont un miroir de event.text / event.responsable —
+// maintenus synchronisés à chaque sauvegarde de l'événement (save-cal-event,
+// 14-event-delegation.js). category est directement éditable depuis le
+// formulaire d'événement (champ "Catégorie").
 ```
 
-**CalendarEvent** (un événement du calendrier annuel) :
+**CalendarEvent** (un événement du calendrier annuel — la SEULE façon de
+créer une ligne, via le bouton « + Nouvel événement ») :
 ```js
 {
-  id, rowId,           // référence un CalendarRow.id
+  id, rowId,           // référence le CalendarRow qu'il définit (1:1)
   text, responsable,    // 'responsable' ajouté le 21/08/2026
   year, startMonth, endMonth,  // mois 0-indexés (Jan=0…Déc=11)
   colorClass,           // une clé de CAL_COLORS (04-calendar.js)
@@ -144,15 +151,26 @@ libre, **indépendante** de `Project` ; voir §4 pour la justification) :
     // l'est pas, et inversement)
 }
 ```
-Existe en deux chemins de création distincts (`add-cal-event` en cliquant une
-cellule, ou `save-cal-row` via « + Groupe » → « Ajouter un premier
-événement ») — **toute évolution du modèle CalendarEvent doit être
-répercutée dans les deux formulaires** (`renderCalEventModalInner` et le
-bloc `cr-ev-*` de `renderCalRowModalInner`, tous deux dans
-`04-calendar.js`) et **leurs deux handlers de sauvegarde** (`save-cal-event`
-et `save-cal-row`, tous deux dans `14-event-delegation.js`) — un oubli sur
-l'un des deux chemins a déjà causé de la confusion (voir historique de
-session, champ Année ajouté à un seul chemin dans un premier temps).
+Un seul chemin de création : bouton « + Nouvel événement »
+(`add-cal-event-standalone`) → `renderCalEventModalInner` en mode `isNew` →
+`save-cal-event` crée la ligne ET l'événement ensemble. Éditer un événement
+existant (`edit-cal-event`, en cliquant sur sa ligne/case) met aussi à jour
+`label`/`sub`/`category` de sa ligne pour rester synchronisé. Supprimer un
+événement (`delete-cal-event`) supprime sa ligne **et** ses notes en
+cascade.
+
+**CalendarCellNote** (note libre déposée dans une case précise d'une ligne,
+indépendante de l'événement — ajoutée le 21/08/2026) :
+```js
+{ id, rowId, year, month, text }
+```
+Sert à annoter une case qui n'est ni dans la plage de l'événement définissant
+ni dans sa fenêtre de préparation (ex. « créer formulaire » en novembre,
+« envoi formulaire » en décembre, sur la ligne d'un événement dont la date
+« officielle » est ailleurs). Créée/éditée via `add-cal-note`/`edit-cal-note`
+→ `renderCalNoteModalInner` → `save-cal-note` (texte vidé = suppression de la
+note). Stockée dans `cal.cellNotes[]`.
+
 
 Pas d'identifiants séquentiels : tout objet créé utilise `uid()` (UUID natif,
 ou repli horodaté si `crypto.randomUUID` indisponible).

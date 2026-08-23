@@ -2,7 +2,59 @@
 
 ## Dernière session
 
-**Ajout du champ Responsable sur les événements du calendrier** (21/08/2026).
+**Refonte de la structure de l'agenda : fusion ligne/événement, notes libres
+par case** (21/08/2026).
+
+Après plusieurs allers-retours sur l'ergonomie du calendrier (voir sessions
+précédentes), Jul a formulé une demande précise et confirmée avec elle avant
+codage :
+- Suppression de l'étape « créer un groupe » séparée, qui précédait la
+  création d'un événement.
+- Un événement se crée désormais **directement** : nom, responsable,
+  catégorie (facultative, remplace le choix d'un groupe existant), date,
+  récurrence, couleur, mois de préparation — en un seul bloc de champs.
+- Cet événement devient **lui-même la ligne** du tableau (plus de gestion de
+  ligne séparée).
+- Sur cette ligne, on peut ensuite cliquer n'importe quelle autre case de
+  mois pour y ajouter une **note libre** indépendante (ex. « créer
+  formulaire » en novembre, « envoi formulaire » en décembre), sans passer
+  par un formulaire complet.
+
+Modifications (`04-calendar.js`, `14-event-delegation.js`, `08-modals.js`,
+`01-core.js`, `11-import.js`) :
+- **`CalendarRow` et `CalendarEvent` sont désormais toujours liés 1:1.**
+  Créer un événement (bouton unique « + Nouvel événement ») crée sa ligne en
+  même temps ; l'éditer resynchronise `label`/`sub`/`category` de la ligne ;
+  le supprimer supprime la ligne en cascade.
+- Le sélecteur « Groupe de projet » de la modale événement est remplacé par
+  un champ **Catégorie** libre (avec suggestions des catégories existantes).
+- `renderCalRowModalInner` et tout le flux `*-cal-row` (add/edit/save/delete)
+  sont **retirés** — n'existent plus.
+- Nouveau modèle **`CalendarCellNote`** (`{id, rowId, year, month, text}`),
+  stocké dans `cal.cellNotes[]` : notes libres par case, gérées par
+  `add-cal-note`/`edit-cal-note`/`save-cal-note`/`delete-cal-note` et la
+  nouvelle modale `renderCalNoteModalInner`.
+- `cal.cellNotes` initialisé dans `defaultData()`/`loadData()` (comme
+  `rows`/`events`) et restauré par `importFullBackup()` — bug potentiel de
+  perte de données repéré et corrigé au passage (l'import écrasait le
+  calendrier sans jamais restaurer `cellNotes`).
+- `ARCHITECTURE.md` mis à jour (modèle de données, plus aucune mention du
+  double chemin de création).
+
+Contrôle anti-régression : `node --check` OK sur les 5 fichiers touchés et
+le bundle final. Recherche exhaustive de références résiduelles aux
+identifiants supprimés (`cal-row`, `cr-label`, `cr-ev-*`, etc.) — aucune
+trouvée. Script de fumée dédié (18 assertions) couvrant tout le nouveau
+cycle : création directe (ligne auto-créée avec le bon label/sub/category),
+édition (resynchronisation de la ligne), notes libres (création, édition,
+suppression par texte vidé), suppression en cascade (événement + ligne +
+notes) — tous corrects. Re-validation du script de fumée existant sur la
+fenêtre de préparation à cheval sur 2 années (session précédente,
+`prepEvents`) — comportement inchangé, non affecté par cette refonte.
+
+## Session précédente (même jour)
+
+**Ajout du champ Responsable sur les événements du calendrier.**
 
 Demande de Jul : pouvoir renseigner, sur un événement du calendrier annuel,
 un nom, une personne responsable, un groupe de projet, une date (avec
@@ -15,10 +67,13 @@ Modifications :
 - Nouveau champ `responsable` (texte libre) ajouté au modèle `CalendarEvent`
   et documenté dans `ARCHITECTURE.md` (le modèle Event/Row n'avait d'ailleurs
   jamais été formellement documenté — comblé au passage).
-- Ajouté aux **deux chemins de création** (`renderCalEventModalInner` et le
-  formulaire intégré `cr-ev-*` de `renderCalRowModalInner`, tous deux dans
-  `04-calendar.js`) et à leurs **deux handlers de sauvegarde**
-  (`save-cal-event` et `save-cal-row`, dans `14-event-delegation.js`).
+- Ajouté aux **deux chemins de création** existant à l'époque
+  (`renderCalEventModalInner` et le formulaire intégré `cr-ev-*` de
+  `renderCalRowModalInner`, tous deux dans `04-calendar.js`) et à leurs
+  **deux handlers de sauvegarde** (`save-cal-event` et `save-cal-row`, dans
+  `14-event-delegation.js`). **Note : ce double chemin n'existe plus** — voir
+  la refonte ci-dessus (même jour, session plus récente) qui l'a remplacé
+  par un chemin de création unique.
 - Affiché en petit texte sous le nom de l'événement dans la grille du
   calendrier (`04-calendar.js`), et dans le panneau « Préparation projets du
   mois » de la page d'accueil (`03-home.js`) quand renseigné.
@@ -64,13 +119,10 @@ reste fonctionnelle avec ce nouveau champ optionnel présent.
 
 ## Prochaine étape
 
-- Obtenir le choix de Jul parmi 4 pistes d'ergonomie proposées pour l'agenda
-  (vue liste chronologique, formulaire en 2 étapes, filtrage/repli des
-  groupes peu utilisés, ou préciser le moment exact qui pose souci), puis
-  implémenter.
+- Tester en conditions réelles la nouvelle structure de l'agenda (voir
+  dernière session) et ajuster si besoin après usage.
 - Pistes non planifiées, en attente : images dans les notes ; import du PV du
-  Kanban collaboratif (`board-suivi-projet.html`) avec routage par tâche ;
-  éventuel lien entre les groupes du calendrier et les vrais projets de l'app.
+  Kanban collaboratif (`board-suivi-projet.html`) avec routage par tâche.
 
 ## Bugs connus
 
