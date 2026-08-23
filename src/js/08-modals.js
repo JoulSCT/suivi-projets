@@ -9,7 +9,7 @@ function renderModal(){
   else if(state.modal.type==='edit-task'){ inner = renderEditTaskModalInner(); wide = ' wide'; }
   else if(state.modal.type==='confirm-delete'){ inner = renderConfirmDeleteModalInner(); }
   else if(state.modal.type==='cal-event'){ inner = renderCalEventModalInner(); }
-  else if(state.modal.type==='cal-row'){ inner = renderCalRowModalInner(); }
+  else if(state.modal.type==='cal-note'){ inner = renderCalNoteModalInner(); }
   else if(state.modal.type==='vigilance'){ inner = renderVigilanceModalInner(); }
   else if(state.modal.type==='development'){ inner = renderDevelopmentModalInner(); }
   else if(state.modal.type==='priority-schedule'){ inner = renderPriorityScheduleModalInner(); }
@@ -304,18 +304,6 @@ function attachDynamicValues(){
           picker.querySelectorAll('[data-color]').forEach(b=>b.style.borderColor='transparent');
           btn.style.borderColor='var(--navy)';
           document.getElementById('ce-color').value = btn.getAttribute('data-color');
-        });
-      });
-    }
-  }
-  if(state.modal && state.modal.type==='cal-row'){
-    const picker = document.getElementById('cr-ev-color-picker');
-    if(picker){
-      picker.querySelectorAll('[data-row-color]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          picker.querySelectorAll('[data-row-color]').forEach(b=>b.style.borderColor='transparent');
-          btn.style.borderColor='var(--navy)';
-          document.getElementById('cr-ev-color').value = btn.getAttribute('data-row-color');
         });
       });
     }

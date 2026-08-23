@@ -69,10 +69,11 @@ function importFullBackup(pkg){
   state.data.pages = {};
   state.data.evolvingPV = {};
   state.data.quickNotes = [];
-  state.data.calendar = { rows: [], events: [] };
-  if(pkg.calendar && (pkg.calendar.rows || pkg.calendar.events)){
+  state.data.calendar = { rows: [], events: [], cellNotes: [] };
+  if(pkg.calendar && (pkg.calendar.rows || pkg.calendar.events || pkg.calendar.cellNotes)){
     state.data.calendar.rows = pkg.calendar.rows || [];
     state.data.calendar.events = pkg.calendar.events || [];
+    state.data.calendar.cellNotes = pkg.calendar.cellNotes || [];
   }
   // Quick notes
   if(Array.isArray(pkg.quickNotes)) state.data.quickNotes = pkg.quickNotes;

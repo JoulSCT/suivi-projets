@@ -20,68 +20,41 @@ document.getElementById('app').addEventListener('click', function(e){
     case 'cal-prev-year': state.calYear--; render(); break;
     case 'cal-next-year': state.calYear++; render(); break;
 
-    case 'add-cal-row':
-      state.modal = { type:'cal-row', row:{} }; render(); break;
-    case 'edit-cal-row': {
-      const rowToEdit = state.data.calendar.rows.find(r=>r.id===id);
-      if(rowToEdit) { state.modal = { type:'cal-row', row:{...rowToEdit} }; render(); }
+    case 'add-cal-event-standalone':
+      state.modal = { type:'cal-event', isNew:true, rowId:null, event:{ colorClass:'ec-rose', text:'', year:state.calYear } };
+      render(); break;
+    case 'add-cal-note': {
+      const noteRowId = el.getAttribute('data-row-id');
+      const noteMonth = Number(el.getAttribute('data-month'));
+      const noteYear = Number(el.getAttribute('data-year'));
+      if(e.target.closest('.cal-event')) break;
+      state.modal = { type:'cal-note', isNew:true, note:{ rowId:noteRowId, month:noteMonth, year:noteYear, text:'' } };
+      render(); break;
+    }
+    case 'edit-cal-note': {
+      const noteToEdit = (state.data.calendar.cellNotes||[]).find(n=>n.id===id);
+      if(noteToEdit) { state.modal = { type:'cal-note', isNew:false, note:{...noteToEdit} }; render(); }
       break;
     }
-    case 'save-cal-row': {
-      const label = document.getElementById('cr-label').value.trim();
-      if(!label) break;
-      const sub = document.getElementById('cr-sub').value.trim();
-      const cat = document.getElementById('cr-cat').value.trim();
-      const existing = state.modal.row && state.modal.row.id;
-      let rowId5;
-      if(existing){
-        const r = state.data.calendar.rows.find(x=>x.id===existing);
-        if(r){ r.label=label; r.sub=sub; r.category=cat; }
-        rowId5 = existing;
+    case 'save-cal-note': {
+      const noteText = document.getElementById('cn-text').value.trim();
+      const nm = state.modal.note;
+      if(!state.data.calendar.cellNotes) state.data.calendar.cellNotes = [];
+      if(!noteText){
+        // Empty text: remove the note if it existed, otherwise just close.
+        state.data.calendar.cellNotes = state.data.calendar.cellNotes.filter(n=>n.id!==nm.id);
+      } else if(state.modal.isNew){
+        state.data.calendar.cellNotes.push({ id:uid(), rowId:nm.rowId, year:nm.year, month:nm.month, text:noteText });
       } else {
-        rowId5 = uid();
-        state.data.calendar.rows.push({ id:rowId5, label, sub, category:cat });
-        // Also create event if checked
-        const addEv = document.getElementById('cr-add-event');
-        if(addEv && addEv.checked){
-          const evText = (document.getElementById('cr-ev-text').value||'').trim();
-          const evResponsable = (document.getElementById('cr-ev-responsable').value||'').trim();
-          const evStart = Number(document.getElementById('cr-ev-start').value);
-          const evEnd = Math.max(evStart, Number(document.getElementById('cr-ev-end').value));
-          const evYearEl = document.getElementById('cr-ev-year');
-          const evYear = (evYearEl && Number(evYearEl.value)) || state.calYear;
-          const evColor = document.getElementById('cr-ev-color').value || 'ec-rose';
-          const evRecurring = document.getElementById('cr-ev-recurring').checked;
-          const evRemOn = document.getElementById('cr-ev-reminder').checked;
-          const evReminder = evRemOn ? {
-            active:true,
-            amount: Number(document.getElementById('cr-rem-amount').value)||1,
-            unit: document.getElementById('cr-rem-unit').value||'mois',
-            recurring: document.getElementById('cr-rem-recurring').checked
-          } : { active:false };
-          if(evText) state.data.calendar.events.push({ id:uid(), rowId:rowId5, year:evYear, startMonth:evStart, endMonth:evEnd, colorClass:evColor, text:evText, responsable:evResponsable, recurring:evRecurring, reminder:evReminder });
-        }
+        const n = state.data.calendar.cellNotes.find(x=>x.id===nm.id);
+        if(n) n.text = noteText;
       }
       state.modal=null; persistAndRender(); break;
     }
-    case 'delete-cal-row': {
-      const rowId2 = el.getAttribute('data-id') || (state.modal.row && state.modal.row.id);
-      state.modal = { type:'confirm-delete', message:'Supprimer cette ligne et tous ses événements ?',
-        pendingAction:()=>{
-          state.data.calendar.rows = state.data.calendar.rows.filter(r=>r.id!==rowId2);
-          state.data.calendar.events = state.data.calendar.events.filter(e=>e.rowId!==rowId2);
-          state.modal=null; persistAndRender();
-        }
-      };
-      render(); break;
-    }
-    case 'add-cal-event': {
-      const rowId3 = el.getAttribute('data-row-id');
-      const month3 = Number(el.getAttribute('data-month'));
-      // Don't open if clicking an event inside the cell
-      if(e.target.closest('.cal-event')) break;
-      state.modal = { type:'cal-event', isNew:true, rowId:rowId3, event:{ rowId:rowId3, startMonth:month3, endMonth:month3, colorClass:'ec-rose', text:'', year:state.calYear } };
-      render(); break;
+    case 'delete-cal-note': {
+      const nm2 = state.modal.note;
+      state.data.calendar.cellNotes = (state.data.calendar.cellNotes||[]).filter(n=>n.id!==nm2.id);
+      state.modal=null; persistAndRender(); break;
     }
     case 'edit-cal-event': {
       e.stopPropagation();
@@ -93,8 +66,7 @@ document.getElementById('app').addEventListener('click', function(e){
       const m2 = state.modal;
       const text = document.getElementById('ce-text').value.trim();
       const responsable = document.getElementById('ce-responsable').value.trim();
-      const rowSelect = document.getElementById('ce-row');
-      const rowId4 = (rowSelect && rowSelect.value) || m2.rowId || m2.event.rowId;
+      const category = document.getElementById('ce-category').value.trim();
       const start = Number(document.getElementById('ce-start').value);
       const end = Math.max(start, Number(document.getElementById('ce-end').value));
       const yearVal = Number(document.getElementById('ce-year').value) || state.calYear;
@@ -107,19 +79,37 @@ document.getElementById('app').addEventListener('click', function(e){
         unit: document.getElementById('ce-rem-unit').value||'mois',
         recurring: document.getElementById('ce-rem-recurring') ? document.getElementById('ce-rem-recurring').checked : false
       } : { active: false };
-      if(!rowId4) { state.modal=null; render(); break; }
+      if(!text) { state.modal=null; render(); break; }
       if(m2.isNew){
-        state.data.calendar.events.push({ id:uid(), rowId:rowId4, year:yearVal, startMonth:start, endMonth:end, colorClass, text, responsable, recurring, reminder });
+        // No existing row to attach to: create one to match this event
+        // (a row is always 1:1 with its defining event — no separate
+        // "group creation" step anymore).
+        const newRowId = uid();
+        state.data.calendar.rows.push({ id:newRowId, label:text, sub:responsable, category });
+        state.data.calendar.events.push({ id:uid(), rowId:newRowId, year:yearVal, startMonth:start, endMonth:end, colorClass, text, responsable, recurring, reminder });
       } else {
         const ev3 = state.data.calendar.events.find(x=>x.id===m2.event.id);
-        if(ev3){ ev3.text=text; ev3.responsable=responsable; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.rowId=rowId4; ev3.recurring=recurring; ev3.reminder=reminder; }
+        if(ev3){
+          ev3.text=text; ev3.responsable=responsable; ev3.startMonth=start; ev3.endMonth=end; ev3.year=yearVal; ev3.colorClass=colorClass; ev3.recurring=recurring; ev3.reminder=reminder;
+          const r = state.data.calendar.rows.find(x=>x.id===ev3.rowId);
+          if(r){ r.label=text; r.sub=responsable; r.category=category; }
+        }
       }
       state.modal=null; persistAndRender(); break;
     }
     case 'delete-cal-event': {
       const evId = state.modal.event && state.modal.event.id;
-      state.modal = { type:'confirm-delete', message:'Supprimer cet événement ?',
-        pendingAction:()=>{ state.data.calendar.events=state.data.calendar.events.filter(x=>x.id!==evId); state.modal=null; persistAndRender(); }
+      state.modal = { type:'confirm-delete', message:'Supprimer cet événement et toutes ses notes ?',
+        pendingAction:()=>{
+          const delEv = state.data.calendar.events.find(x=>x.id===evId);
+          const delRowId = delEv && delEv.rowId;
+          state.data.calendar.events = state.data.calendar.events.filter(x=>x.id!==evId);
+          if(delRowId){
+            state.data.calendar.rows = state.data.calendar.rows.filter(r=>r.id!==delRowId);
+            state.data.calendar.cellNotes = (state.data.calendar.cellNotes||[]).filter(n=>n.rowId!==delRowId);
+          }
+          state.modal=null; persistAndRender();
+        }
       };
       render(); break;
     }

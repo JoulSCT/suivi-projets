@@ -40,6 +40,7 @@ let state = {
   evolvingEditMode: true,
   dragProjectId: null,
   homeNoteInput: '',
+  editingQuickNoteId: null,
   calYear: new Date().getFullYear(),          // 'seances' | 'pages'
   draftSeance: null,
   draftPage: null,
@@ -97,7 +98,7 @@ function escapeHtml(s){
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function isOverdue(task){ return task.echeance && !DONE_STATUSES.includes(task.statut) && task.echeance < todayStr(); }
-function defaultData(){ return { projects: [], seances: {}, pages: {}, quickNotes: [], calendar: { rows:[], events:[] }, evolvingPV: {} }; }
+function defaultData(){ return { projects: [], seances: {}, pages: {}, quickNotes: [], calendar: { rows:[], events:[], cellNotes:[] }, evolvingPV: {} }; }
 
 function getProject(id){ return state.data.projects.find(p => p.id === id); }
 function getChildren(id){ return state.data.projects.filter(p => p.parentId === id); }
@@ -212,9 +213,10 @@ async function loadData(){
     parsed.seances = parsed.seances || {};
     parsed.pages = parsed.pages || {};
     parsed.quickNotes = parsed.quickNotes || [];
-    parsed.calendar = parsed.calendar || { rows:[], events:[] };
+    parsed.calendar = parsed.calendar || { rows:[], events:[], cellNotes:[] };
     parsed.calendar.rows = parsed.calendar.rows || [];
     parsed.calendar.events = parsed.calendar.events || [];
+    parsed.calendar.cellNotes = parsed.calendar.cellNotes || [];
     parsed.evolvingPV = parsed.evolvingPV || {};
     state.data = parsed;
   }catch(e){
