@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34806225/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34806533/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -178,6 +178,16 @@ pour le modèle de données complet.
     qui existe ailleurs dans l'app (ajout direct de tâche, tableau de
     bord…) — ajoutée avec le même choix « maintenant / à partir d'une
     date » que les autres emplacements, pour rester cohérent.
+
+**1 correction suite à un retour de Jul sur le glisser-déposer, même jour** :
+
+15. ✅ **Le glisser-déposer faisait « remonter en haut » la liste à chaque
+    dépose** (`02-render-root.js`). Cause : la mini-liste « Échéances à
+    venir » a son propre défilement interne (`#upcoming-list`, `overflow-y:
+    auto`), distinct de celui de la zone principale (`main.content`) — et
+    seul ce dernier était restauré après un re-rendu complet de l'app
+    (déclenché à chaque dépose). Corrigé en sauvegardant/restaurant aussi la
+    position de défilement de `#upcoming-list` dans `render()`.
 
 ## Prochaine étape
 
