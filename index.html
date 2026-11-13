@@ -261,6 +261,11 @@
   .form-row input:focus, .form-row textarea:focus, .form-row select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(26,74,122,.1);}
   .form-row textarea{resize:vertical;min-height:60px;}
   .form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  /* min-width:0 empêche une colonne de grille de s'agrandir au-delà de sa
+     part (1fr) à cause d'un enfant redimensionné (.rte-body) — sans ça,
+     agrandir un champ en largeur pouvait pousser toute la modale hors de
+     l'écran (voir piège correspondant dans ARCHITECTURE.md). */
+  .form-grid2 > .form-row{min-width:0;}
   .dyn-list{display:flex;flex-direction:column;gap:7px;}
   .dyn-row{display:flex;gap:7px;align-items:center;}
   .dyn-row input{flex:1;}
@@ -276,10 +281,10 @@
   .modal-overlay{position:fixed;inset:0;background:rgba(10,20,35,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
   .modal-card{background:var(--card);border-radius:14px;padding:26px 28px;width:480px;max-width:96vw;max-height:92vh;overflow-y:auto;overflow-x:hidden;box-shadow:var(--shadow-lg);}
   .modal-card.wide{width:640px;}
-  .modal-card.xwide{width:960px;}
+  .modal-card.xwide{width:820px;}
 
   /* Rich text editor */
-  .rte-wrap{border:1px solid var(--paper-line);border-radius:6px;background:#FAFCFF;overflow:hidden;box-shadow:var(--shadow-sm);}
+  .rte-wrap{min-width:0;border:1px solid var(--paper-line);border-radius:6px;background:#FAFCFF;overflow:hidden;box-shadow:var(--shadow-sm);}
   .rte-toolbar{display:flex;gap:3px;padding:6px 8px;background:#F2F5FA;border-bottom:1px solid var(--paper-line);flex-wrap:wrap;align-items:center;}
   .rte-btn{padding:4px 8px;border-radius:4px;border:1px solid transparent;background:none;font-family:var(--font-body);font-size:.82rem;cursor:pointer;color:var(--ink);line-height:1;transition:all .1s;min-width:28px;text-align:center;}
   .rte-btn:hover{background:var(--blush);border-color:var(--paper-line);}
