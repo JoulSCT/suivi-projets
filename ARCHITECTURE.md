@@ -1,4 +1,4 @@
-[ARCHITECTURE.md](https://github.com/user-attachments/files/34794833/ARCHITECTURE.md)
+[ARCHITECTURE.md](https://github.com/user-attachments/files/34797871/ARCHITECTURE.md)
 # ARCHITECTURE — Suivi de Projets (HUG)
 
 ## 1. Vue d'ensemble
@@ -331,7 +331,20 @@ texte brut : `seance.notes`, `seance.conclusions[]`, `page.notes`,
     générateur de HTML "à la main" (motif `o+'tag ...'+c+...+o+'/tag'+c`,
     `o`='<', `c`='>') doit être relue caractère par caractère : un `+c+`
     manquant ne lève aucune erreur JS, il corrompt juste le rendu final.
-11. **`getUpcomingDeadlines()` (`03-home.js`) n'a qu'une granularité
+11. **Dans le tableau de bord (`05-dashboard.js`, `renderTasksDashboard`),
+    « Terminées » regroupe les 3 statuts de fin** (`DONE_STATUSES` :
+    `fait`, `fait (R.A.)`, `non réalisé`), pas seulement `fait` —
+    corrigé le 13/11/2026 (Total ne correspondait pas à la somme des
+    4 cartes). Le clic sur cette carte utilise un marqueur interne
+    `state.dashboardFilters.statut === '__done__'`, distinct des valeurs
+    individuelles de `STATUS_LIST` utilisées par le menu déroulant
+    « Tous les statuts ». Si une nouvelle carte ou un nouveau filtre
+    touche `dashboardFilters.statut`, vérifier qu'il gère bien ce cas
+    spécial (voir le filtre de `rows` dans `renderTasksDashboard`).
+    « En retard » reste un sous-ensemble transverse de À faire/En cours
+    (jamais une tâche terminée), donc ne s'additionne jamais aux 3
+    autres cartes — c'est volontaire, pas un bug.
+12. **`getUpcomingDeadlines()` (`03-home.js`) n'a qu'une granularité
     mensuelle pour les événements du calendrier** (pas de jour exact dans
     `CalendarEvent`). Un événement est inclus dès que son mois chevauche la
     fenêtre de 30 jours, et sa date affichée est "clampée" à aujourd'hui si
@@ -365,7 +378,8 @@ texte brut : `seance.notes`, `seance.conclusions[]`, `page.notes`,
 | **Comportement d'un clic/changement/collage/touche** (`data-action="..."`) | `js/14-event-delegation.js` |
 | Séquence de démarrage de l'app | `js/15-init.js` |
 | Recherche globale (barre de recherche, `searchAll`, `renderSearchResults`) | `js/02-render-root.js` (rendu + logique), `js/14-event-delegation.js` (saisie/Échap/clic), `src/styles.css` (`.sidebar-search`) |
-| Export RA (classification projet/sous-projet, colonnes alignées) | `js/10-actions-projects-export.js` (`getRaFilteredTasks`, `exportRaExcel`, `exportRaWord`) |
+| Export RA (classification projet/sous-projet, colonnes alignées) | `js/10-actions-projects-export.js` (`getRaFilteredTasks`, `exportRaExcel`, `exportRaWord`) + `js/05-dashboard.js` (`renderRaDashboard`, vue à l'écran, réutilise `getRaFilteredTasks`) |
+| Tableau de bord Tâches (cartes stats, filtres) | `js/05-dashboard.js` (`renderTasksDashboard`) |
 | Sauvegarde JSON automatique périodique | `js/12-reminder-epv.js` (`checkAutoExport`), `js/10-actions-projects-export.js` (`exportJson`), `js/15-init.js` |
 | Panneau « Échéances à venir » (accueil) | `js/03-home.js` (`getUpcomingDeadlines`, `renderHome`) |
 | Assemblage final en un seul fichier | `bundle.py` |
