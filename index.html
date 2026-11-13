@@ -313,6 +313,11 @@
   .swatch-option:hover{transform:scale(1.15);box-shadow:0 3px 10px rgba(0,0,0,.3);}
   .swatch-option.selected{border-color:#fff;outline:2px solid var(--navy);outline-offset:1px;}
 
+  /* Échéances à venir — glisser-déposer */
+  .upcoming-item{transition:transform .08s, box-shadow .08s;}
+  .upcoming-item.dragging{opacity:.4;}
+  .upcoming-item.drag-over{border-color:var(--navy)!important;border-style:dashed!important;background:#E8F0FB!important;}
+
   /* ===== BANNER ===== */
   .banner{position:fixed;bottom:16px;right:16px;color:#fff;padding:10px 16px;border-radius:8px;font-size:.82rem;box-shadow:var(--shadow-lg);z-index:80;max-width:340px;backdrop-filter:blur(4px);}
   .banner{background:rgba(212,60,60,.92);}
@@ -1069,7 +1074,42 @@ function getUpcomingDeadlines(){
     });
   });
 
-  return [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+  const items = [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+  items.forEach(it => { it.key = upcomingItemKey(it); });
+
+  // Ordre manuel (glisser-déposer) : state.data.upcomingOrder est la liste
+  // des clés dans l'ordre choisi par l'utilisateur. Les items qui y figurent
+  // gardent cet ordre ; les items absents (nouveaux depuis le dernier
+  // réarrangement) sont ajoutés à la suite, triés par date comme avant.
+  const order = state.data.upcomingOrder || [];
+  if(order.length){
+    const byKey = new Map(items.map(it => [it.key, it]));
+    const ordered = order.map(k => byKey.get(k)).filter(Boolean);
+    const orderedKeys = new Set(ordered.map(it => it.key));
+    const rest = items.filter(it => !orderedKeys.has(it.key));
+    return [...ordered, ...rest];
+  }
+  return items;
+}
+
+function upcomingItemKey(item){
+  return item.kind==='task' ? ('task:'+item.task.taskId) : ('event:'+item.event.id);
+}
+
+// Réordonne manuellement les "Échéances à venir" après un glisser-déposer :
+// reconstruit l'ordre complet depuis l'ordre actuellement affiché à l'écran
+// (lu dans le DOM), avec draggedKey déplacé juste avant/après targetKey.
+function reorderUpcoming(draggedKey, targetKey, after){
+  if(!draggedKey || !targetKey || draggedKey===targetKey) return;
+  const listEl = document.getElementById('upcoming-list');
+  if(!listEl) return;
+  let keys = [...listEl.querySelectorAll('.upcoming-item')].map(el => el.getAttribute('data-upcoming-key'));
+  keys = keys.filter(k => k !== draggedKey);
+  let idx = keys.indexOf(targetKey);
+  if(idx === -1) idx = keys.length - 1;
+  keys.splice(after ? idx+1 : idx, 0, draggedKey);
+  state.data.upcomingOrder = keys;
+  persistAndRender();
 }
 
 function renderHome(){
@@ -1253,11 +1293,13 @@ function renderHome(){
         '</div>' +
         (upcoming.length===0
           ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune échéance dans les 30 prochains jours.</p>'
-          : '<div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
+          : '<div id="upcoming-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
               upcoming.map(item => {
+                const key = item.key || upcomingItemKey(item);
                 if(item.kind==='task'){
                   const t = item.task;
-                  return '<div data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                  return '<div class="upcoming-item" draggable="true" data-upcoming-key="'+key+'" data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:grab;">' +
+                    '<span style="font-size:.75rem;color:var(--ink-soft);cursor:grab;" title="Glisser pour réordonner">⠿</span>' +
                     '<span style="font-size:.85rem;">☑</span>' +
                     '<div style="flex:1;min-width:0;">' +
                       '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(t.description)+'</div>' +
@@ -1267,7 +1309,8 @@ function renderHome(){
                 }
                 const ev = item.event;
                 const rowLabel = item.row ? item.row.label : '';
-                return '<div data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                return '<div class="upcoming-item" draggable="true" data-upcoming-key="'+key+'" data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:grab;">' +
+                  '<span style="font-size:.75rem;color:var(--ink-soft);cursor:grab;" title="Glisser pour réordonner">⠿</span>' +
                   '<span style="font-size:.85rem;">📌</span>' +
                   '<div style="flex:1;min-width:0;">' +
                     '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(ev.text||rowLabel)+'</div>' +
@@ -2571,6 +2614,22 @@ function renderEditTaskModalInner(){
       '<select id="et-statut">' +
         STATUS_LIST.map(s=>'<option value="'+s+'"'+(t.statut===s?' selected':'')+'>'+s+'</option>').join('') +
       '</select>' +
+    '</div>' +
+    '<div class="form-row" style="background:#FFFBF0;border:1px solid #E8D870;border-radius:8px;padding:10px 14px;">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;font-family:var(--font-body);margin-bottom:'+(t.priority?'8px':'0')+';">' +
+        '<input type="checkbox" id="et-priority" style="width:14px;height:14px;accent-color:#7A5800;"'+(t.priority?' checked':'')+' onchange="document.getElementById(\'et-prio-date-wrap\').style.display=this.checked?\'flex\':\'none\'">' +
+        '⭐ Marquer comme prioritaire' +
+      '</label>' +
+      '<div id="et-prio-date-wrap" style="display:'+(t.priority?'flex':'none')+';align-items:center;gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:.82rem;color:var(--ink-soft);">Afficher à partir du :</span>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;font-family:var(--font-body);text-transform:none;letter-spacing:0;color:var(--ink-soft);">' +
+          '<input type="radio" name="et-prio-when" value="now"'+(t.priorityFrom?'':' checked')+' style="accent-color:#7A5800;"> Maintenant' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;font-family:var(--font-body);text-transform:none;letter-spacing:0;color:var(--ink-soft);">' +
+          '<input type="radio" name="et-prio-when" value="later"'+(t.priorityFrom?' checked':'')+' style="accent-color:#7A5800;"> Date :' +
+          '<input type="date" id="et-prio-date" value="'+escapeHtml(t.priorityFrom||'')+'" style="padding:4px 7px;border:1px solid var(--paper-line);border-radius:5px;font-family:inherit;font-size:.8rem;margin-left:4px;">' +
+        '</label>' +
+      '</div>' +
     '</div>' +
     '<div class="form-row" style="background:var(--blush);border-radius:8px;padding:10px 14px;">' +
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;font-family:var(--font-body);margin-bottom:6px;">' +
@@ -4593,6 +4652,20 @@ document.getElementById('app').addEventListener('click', function(e){
       m.task.echeance = noDate ? '' : document.getElementById('et-date').value;
       setTaskStatut(m.task, document.getElementById('et-statut').value);
 
+      // Priorité (⭐) : même logique que l'ajout direct de tâche / les points
+      // de vigilance EPV — cocher rend prioritaire immédiatement ou à partir
+      // d'une date choisie ; décocher retire la priorité.
+      const etPrioCheckbox = document.getElementById('et-priority');
+      if(etPrioCheckbox && etPrioCheckbox.checked){
+        const etPrioWhen = document.querySelector('input[name="et-prio-when"]:checked');
+        const etPrioDate = document.getElementById('et-prio-date');
+        m.task.priority = true;
+        m.task.priorityFrom = (etPrioWhen && etPrioWhen.value==='later' && etPrioDate && etPrioDate.value) ? etPrioDate.value : null;
+      } else if(etPrioCheckbox){
+        m.task.priority = false;
+        m.task.priorityFrom = null;
+      }
+
       // Handle move to another project
       const moveToggle = document.getElementById('et-move-toggle');
       const moveTarget = document.getElementById('et-move-target');
@@ -4982,6 +5055,50 @@ document.getElementById('app').addEventListener('keydown', function(e){
       persistAndRender();
     }
   }
+});
+
+/* ============== DRAG & DROP — Échéances à venir ============== */
+// Réordonnement manuel des tâches/événements du panneau "Échéances à venir"
+// (accueil). HTML5 drag-and-drop natif ; la coexistence avec le clic normal
+// (data-action="open-edit-task" / "edit-cal-event") fonctionne nativement :
+// un vrai clic (sans déplacement de souris) ne déclenche jamais dragstart.
+document.getElementById('app').addEventListener('dragstart', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.dataTransfer.setData('text/plain', item.getAttribute('data-upcoming-key'));
+  e.dataTransfer.effectAllowed = 'move';
+  item.classList.add('dragging');
+});
+
+document.getElementById('app').addEventListener('dragover', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.preventDefault();
+  item.classList.add('drag-over');
+});
+
+document.getElementById('app').addEventListener('dragleave', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(item) item.classList.remove('drag-over');
+});
+
+document.getElementById('app').addEventListener('drop', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.preventDefault();
+  item.classList.remove('drag-over');
+  const draggedKey = e.dataTransfer.getData('text/plain');
+  const targetKey = item.getAttribute('data-upcoming-key');
+  // Dépose dans la moitié basse de l'élément cible -> juste après lui.
+  const rect = item.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height/2;
+  reorderUpcoming(draggedKey, targetKey, after);
+});
+
+document.getElementById('app').addEventListener('dragend', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(item) item.classList.remove('dragging');
+  document.querySelectorAll('.upcoming-item.drag-over').forEach(el=>el.classList.remove('drag-over'));
 });
 
 /* ============== INIT ============== */
