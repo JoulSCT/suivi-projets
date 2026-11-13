@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34804112/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34806225/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -158,6 +158,26 @@ date, récurrence, couleur, mois de préparation) et devient lui-même la
 ligne du tableau (`CalendarRow`/`CalendarEvent` toujours liés 1:1) ; notes
 libres indépendantes par case (`CalendarCellNote`). Voir §2 d'`ARCHITECTURE.md`
 pour le modèle de données complet.
+
+**2 nouvelles demandes de Jul, même jour** :
+
+13. ✅ **Glisser-déposer pour réordonner le panneau « Échéances à venir »**
+    (`03-home.js` pour `upcomingItemKey()`/`reorderUpcoming()` et le rendu,
+    `14-event-delegation.js` pour les événements `dragstart`/`dragover`/
+    `drop`/`dragend`, `styles.css` pour le retour visuel). Chaque ligne
+    (tâche ou événement) est identifiée par une clé stable (`task:ID` ou
+    `event:ID`) et devient `draggable`. L'ordre choisi est sauvegardé dans
+    `state.data.upcomingOrder` (persistant, comme le reste des données) :
+    les éléments déjà réordonnés gardent leur position, les nouveaux
+    éléments (pas encore vus) sont ajoutés à la suite, triés par date comme
+    avant.
+14. ✅ **Pouvoir marquer une tâche prioritaire depuis la fenêtre d'édition**
+    (`08-modals.js`, `renderEditTaskModalInner` ; `14-event-delegation.js`,
+    `save-edit-task`). La fenêtre « Modifier la tâche » (ouverte entre
+    autres depuis « Échéances à venir ») n'avait pas l'option ⭐ Prioritaire
+    qui existe ailleurs dans l'app (ajout direct de tâche, tableau de
+    bord…) — ajoutée avec le même choix « maintenant / à partir d'une
+    date » que les autres emplacements, pour rester cohérent.
 
 ## Prochaine étape
 
