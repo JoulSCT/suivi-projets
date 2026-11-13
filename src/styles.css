@@ -302,6 +302,11 @@
   .swatch-option:hover{transform:scale(1.15);box-shadow:0 3px 10px rgba(0,0,0,.3);}
   .swatch-option.selected{border-color:#fff;outline:2px solid var(--navy);outline-offset:1px;}
 
+  /* Échéances à venir — glisser-déposer */
+  .upcoming-item{transition:transform .08s, box-shadow .08s;}
+  .upcoming-item.dragging{opacity:.4;}
+  .upcoming-item.drag-over{border-color:var(--navy)!important;border-style:dashed!important;background:#E8F0FB!important;}
+
   /* ===== BANNER ===== */
   .banner{position:fixed;bottom:16px;right:16px;color:#fff;padding:10px 16px;border-radius:8px;font-size:.82rem;box-shadow:var(--shadow-lg);z-index:80;max-width:340px;backdrop-filter:blur(4px);}
   .banner{background:rgba(212,60,60,.92);}
