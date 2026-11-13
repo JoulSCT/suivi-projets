@@ -17,7 +17,11 @@ function renderDashboard(){
     (p.vigilances||[]).forEach(v => allVigs.push({ ...v, projectId:p.id, projectName:getProjectPath(p.id), projectColor:p.color }));
   });
 
-  const openTaskCount2 = all.filter(t=>t.statut!=='fait' && t.statut!=='fait (R.A.)').length;
+  // Cohérent avec DONE_STATUSES (comme la carte "Terminées" ci-dessous) :
+  // 'non réalisé' est un statut terminal, donc exclu du compteur "ouvert"
+  // de l'onglet — corrigé le 13/11/2026 (le badge comptait encore les
+  // tâches "non réalisé" comme ouvertes, contrairement au reste de l'app).
+  const openTaskCount2 = all.filter(t=>!DONE_STATUSES.includes(t.statut)).length;
   const raCount = all.filter(t=>t.statut==='fait (R.A.)').length;
   const priorityCount = getPriorityTasks().length;
   const tabsHtml = '<div class="tab-row" style="margin-bottom:22px;">' +
