@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34799423/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34799610/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -118,12 +118,21 @@ l'écran).
     poussée plus large que sa part prévue, donc le champ ne peut plus
     déborder ni de sa colonne ni de la modale, quelle que soit la façon dont
     on le redimensionne.
-11. ✅ **Largeur de la modale « Modifier le projet » revenue à 820px**
-    (annulation de l'élargissement à 960px tenté dans la 1ère tentative, qui
-    causait l'effet de bord visuel signalé) ; la hauteur initiale des champs
-    de texte riche reste à 140px (contre 100px avant ce round de corrections)
-    pour un peu plus de confort par défaut, sans dépendre du redimensionnement
-    manuel.
+11. ✅ **4e retour de Jul, même jour — 2 derniers ajustements** :
+    - Les coins restaient visuellement carrés malgré `border-radius:14px` :
+      cause probable, le `overflow-x:hidden` ajouté sur `.modal-card` dans la
+      tentative précédente (devenu inutile maintenant que la vraie cause du
+      débordement — le `min-width:auto` de la grille — est corrigée au point
+      10 ci-dessus). Retiré ; seul `overflow-y:auto` (déjà présent avant
+      cette série de corrections) est conservé.
+    - Jul souhaitait une modale « Modifier le projet » nettement plus
+      spacieuse pour y saisir librement beaucoup de contenu, sans dépendre du
+      redimensionnement manuel des champs. Le blocage de grille étant corrigé
+      (point 10), il est maintenant sûr de l'agrandir fortement sans risquer
+      un nouveau débordement : `.modal-card.xwide` passe de 820px à **1100px**
+      (toujours plafonné à `max-width:96vw`, donc sans dépassement d'écran),
+      et la hauteur initiale des champs de texte riche passe de 140px à
+      **220px**.
 
 Contrôle anti-régression : `node --check` sur les fichiers touchés et sur
 le bundle final. Script de fumée (16 assertions) toujours au vert après ces
