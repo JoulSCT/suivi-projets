@@ -11,6 +11,12 @@ function render(){
     if(!root) return;
     const main = document.querySelector('main.content');
     const scrollTop = main ? main.scrollTop : 0;
+    // La mini-liste "Échéances à venir" a son propre défilement interne,
+    // distinct de celui de main.content — sans ça, chaque re-rendu (ex. un
+    // glisser-déposer) le remettait à zéro, donnant l'impression que la
+    // liste "remonte en haut" à chaque action.
+    const upcomingListEl = document.getElementById('upcoming-list');
+    const upcomingScrollTop = upcomingListEl ? upcomingListEl.scrollTop : 0;
     root.innerHTML =
       renderSidebar() +
       '<main class="content">' +
@@ -35,6 +41,8 @@ function render(){
       state._lastView = state.view;
       state._lastProjId = state.currentProjectId;
     }
+    const newUpcomingList = document.getElementById('upcoming-list');
+    if(newUpcomingList) newUpcomingList.scrollTop = upcomingScrollTop;
   } catch(err) {
     const root = document.getElementById('app');
     if(root) root.innerHTML = '<div style="padding:32px;font-family:monospace;color:#A6383A;">' +
