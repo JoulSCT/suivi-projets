@@ -279,9 +279,15 @@
 
   /* ===== MODAL ===== */
   .modal-overlay{position:fixed;inset:0;background:rgba(10,20,35,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
-  .modal-card{background:var(--card);border-radius:14px;padding:26px 28px;width:480px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);}
+  /* .modal-card fixe la forme (coins arrondis, largeur, ombre) mais ne
+     défile JAMAIS lui-même : c'est .modal-card-inner, en retrait grâce à
+     son padding, qui porte le scroll. Sans ça, la barre de défilement
+     native (toujours rectangulaire) vient recouvrir et « carrer »
+     visuellement les coins arrondis du haut et du bas à droite. */
+  .modal-card{background:var(--card);border-radius:14px;width:480px;max-width:96vw;max-height:92vh;overflow:hidden;box-shadow:var(--shadow-lg);}
   .modal-card.wide{width:640px;}
-  .modal-card.xwide{width:1100px;}
+  .modal-card.xwide{width:1300px;}
+  .modal-card-inner{padding:26px 28px;max-height:92vh;overflow-y:auto;}
 
   /* Rich text editor */
   .rte-wrap{min-width:0;border:1px solid var(--paper-line);border-radius:6px;background:#FAFCFF;overflow:hidden;box-shadow:var(--shadow-sm);}
@@ -2513,7 +2519,9 @@ function renderModal(){
   else if(state.modal.type==='project'){ inner = renderProjectModalInner(); wide = ' xwide'; }
   else { inner = '<p style="color:var(--ink-soft);">Type de modale inconnu : '+escapeHtml(String(state.modal.type))+'</p><div class="form-actions"><button class="btn btn-ghost" data-action="close-modal">Fermer</button></div>'; }
   return '<div class="modal-overlay" data-action="close-modal">' +
-    '<div class="modal-card' + wide + '" data-action="noop">' + inner + '</div>' +
+    '<div class="modal-card' + wide + '" data-action="noop">' +
+      '<div class="modal-card-inner">' + inner + '</div>' +
+    '</div>' +
   '</div>';
 }
 
