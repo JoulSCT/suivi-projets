@@ -1,3 +1,4 @@
+[ÉTAT.md](https://github.com/user-attachments/files/34799423/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -92,29 +93,43 @@ jour) :
    (+ `overflow:auto` et `min-width:200px` pour que la poignée fonctionne
    correctement dans les deux sens).
 
-**1 correction suite à un 3e retour de Jul, même jour** : en agrandissant un
+**2 corrections suite à un 3e retour de Jul, même jour** : en agrandissant un
 champ de texte riche à l'horizontale, la fenêtre (modale) se fermait parfois
-toute seule.
+toute seule ; une 1ère tentative de correction (ajout de `max-width:100%`
+sur `.rte-body` seul) s'est révélée insuffisante et a en plus élargi la
+modale « Modifier le projet » de façon disproportionnée sur certains écrans
+(coins visuellement « carrés » car la modale touchait presque le bord de
+l'écran).
 
-10. ✅ **Bug corrigé + fenêtres agrandies par défaut** (`styles.css`) :
-    - `.rte-body` n'avait pas de `max-width` : en tirant la poignée vers la
-      droite, le champ pouvait dépasser la largeur de la modale (qui n'avait
-      pas `overflow-x:hidden`) et déborder par-dessus le fond semi-transparent
-      cliquable (qui ferme la modale au clic) — d'où la fermeture intempestive.
-      Corrigé avec `max-width:100%` sur `.rte-body` et `overflow-x:hidden` sur
-      `.modal-card` : un champ ne peut plus déborder de sa fenêtre.
-    - En plus de corriger le bug, et suite à la suggestion de Jul de partir
-      sur une fenêtre plus grande dès le départ plutôt que de compter sur le
-      redimensionnement manuel : la modale « Modifier/Nouveau projet »
-      (`.modal-card.xwide`) est passée de 820px à 960px de large, et la
-      hauteur initiale des champs de texte riche (`.rte-body`) est passée de
-      100px à 140px — pour réduire le besoin de redimensionner à la main.
+10. ✅ **Cause réelle identifiée et corrigée : « débordement » de grille CSS**
+    (`styles.css`). La modale « Modifier le projet » place les 2 champs
+    « Personnes en charge » / « Objectifs » côte à côte dans une grille CSS
+    à 2 colonnes égales (`.form-grid2`). Par défaut, une colonne de grille
+    CSS ne peut jamais devenir plus étroite que le contenu qu'elle contient
+    (`min-width:auto` implicite) — donc quand on tirait la poignée de
+    redimensionnement d'un champ vers la droite, **toute sa colonne** (et
+    donc toute la modale) était forcée de s'élargir en conséquence, jusqu'à
+    déborder de l'écran ; au relâchement de la souris, le clic se terminait
+    sur le fond semi-transparent derrière la modale, qui ferme la fenêtre au
+    clic — d'où la fermeture intempestive. `max-width:100%` seul ne suffisait
+    pas, car les 100% se recalculaient sur une colonne déjà élargie
+    (problème en cascade). Corrigé en ajoutant `min-width:0` sur les
+    colonnes de la grille et sur `.rte-wrap` : une colonne ne peut plus être
+    poussée plus large que sa part prévue, donc le champ ne peut plus
+    déborder ni de sa colonne ni de la modale, quelle que soit la façon dont
+    on le redimensionne.
+11. ✅ **Largeur de la modale « Modifier le projet » revenue à 820px**
+    (annulation de l'élargissement à 960px tenté dans la 1ère tentative, qui
+    causait l'effet de bord visuel signalé) ; la hauteur initiale des champs
+    de texte riche reste à 140px (contre 100px avant ce round de corrections)
+    pour un peu plus de confort par défaut, sans dépendre du redimensionnement
+    manuel.
 
 Contrôle anti-régression : `node --check` sur les fichiers touchés et sur
 le bundle final. Script de fumée (16 assertions) toujours au vert après ces
-3 corrections. `ARCHITECTURE.md` mis à jour (carte fonctionnalité→fichier,
+corrections. `ARCHITECTURE.md` mis à jour (carte fonctionnalité→fichier,
 modèle de données — `cellNotes` manquait dans le schéma racine, corrigé au
-passage —, pièges connus).
+passage —, pièges connus, nouveau piège « débordement de grille CSS »).
 
 ## Session précédente
 
@@ -141,4 +156,3 @@ pour le modèle de données complet.
 Aucun. Voir §4 « Pièges connus / zones fragiles » d'`ARCHITECTURE.md` pour
 les zones à surveiller lors de futures modifications (pas des bugs
 actuels, des risques de régression si on y touche sans précaution).
-[ÉTAT.md](https://github.com/user-attachments/files/34799167/ETAT.md)
