@@ -1104,20 +1104,23 @@ function upcomingItemKey(item){
   return item.kind==='task' ? ('task:'+item.task.taskId) : ('event:'+item.event.id);
 }
 
-// Réordonne manuellement les "Échéances à venir" après un glisser-déposer :
-// reconstruit l'ordre complet depuis l'ordre actuellement affiché à l'écran
-// (lu dans le DOM), avec draggedKey déplacé juste avant/après targetKey.
+// Réordonne manuellement les "Échéances à venir" après un glisser-déposer.
+// Déplace directement le nœud DOM concerné (au lieu d'un persistAndRender()
+// qui redessinerait toute l'application — sidebar comprise — et donnerait
+// l'impression désagréable que toute la page "clique"/se recharge pour un
+// simple changement d'ordre dans une petite liste). L'ordre est ensuite
+// persisté tel qu'affiché, en silence (sans re-rendu).
 function reorderUpcoming(draggedKey, targetKey, after){
   if(!draggedKey || !targetKey || draggedKey===targetKey) return;
   const listEl = document.getElementById('upcoming-list');
   if(!listEl) return;
-  let keys = [...listEl.querySelectorAll('.upcoming-item')].map(el => el.getAttribute('data-upcoming-key'));
-  keys = keys.filter(k => k !== draggedKey);
-  let idx = keys.indexOf(targetKey);
-  if(idx === -1) idx = keys.length - 1;
-  keys.splice(after ? idx+1 : idx, 0, draggedKey);
-  state.data.upcomingOrder = keys;
-  persistAndRender();
+  const children = [...listEl.children];
+  const draggedEl = children.find(el => el.getAttribute && el.getAttribute('data-upcoming-key')===draggedKey);
+  const targetEl = children.find(el => el.getAttribute && el.getAttribute('data-upcoming-key')===targetKey);
+  if(!draggedEl || !targetEl) return;
+  if(after) targetEl.after(draggedEl); else targetEl.before(draggedEl);
+  state.data.upcomingOrder = [...listEl.children].map(el => el.getAttribute('data-upcoming-key'));
+  saveData();
 }
 
 function renderHome(){
