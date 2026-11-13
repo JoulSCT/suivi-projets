@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34797902/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34798682/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -77,18 +77,27 @@
    largeurs de colonnes fixes (`table-layout:fixed` + `colgroup`) à tous
    les tableaux.
 
-Contrôle anti-régression : `node --check` sur les 7 fichiers touchés et sur
-le bundle final. Script de fumée dédié (16 assertions, chargé via `eval` du
-bundle extrait + `state` de test construit à la main) couvrant : tri
-projet/sous-projet de `getRaFilteredTasks`, 4 cas de recherche (page, note,
-événement, vigilance, et requête sans résultat), inclusion/exclusion
-correcte dans `getUpcomingDeadlines` (tâche ouverte incluse, tâche déjà
-faite exclue, événement du mois en cours inclus, tri chronologique),
-`exportJson(true)` sans erreur, identité Total = À faire + En cours +
-Terminées sur le tableau de bord, présence de `table-layout:fixed` +
-`colgroup` dans `renderRaDashboard`. `ARCHITECTURE.md` mis à jour (carte
-fonctionnalité→fichier, modèle de données — `cellNotes` manquait dans le
-schéma racine, corrigé au passage —, pièges connus).
+**2 corrections supplémentaires suite à un nouveau retour de Jul** (même
+jour) :
+
+8. ✅ **Badge « Tâches 62 » de l'onglet (tableau de bord) incohérent avec
+   le reste de l'app** (`05-dashboard.js`, `renderDashboard`). Même famille
+   de bug que les points 6-7 : `openTaskCount2` excluait seulement les
+   statuts `fait` et `fait (R.A.)`, en comptant encore `non réalisé` comme
+   une tâche « ouverte » — alors que ce statut fait partie de
+   `DONE_STATUSES` partout ailleurs dans l'app (sidebar, carte
+   « Terminées », etc.). Corrigé pour utiliser `DONE_STATUSES` de façon
+   cohérente.
+9. ✅ **Champs de texte riche : redimensionnement horizontal en plus du
+   vertical** (`styles.css`, `.rte-body`) : `resize:vertical` → `resize:both`
+   (+ `overflow:auto` et `min-width:200px` pour que la poignée fonctionne
+   correctement dans les deux sens).
+
+Contrôle anti-régression : `node --check` sur les 8 fichiers touchés et sur
+le bundle final. Script de fumée (16 assertions) toujours au vert après ces
+2 corrections. `ARCHITECTURE.md` mis à jour (carte fonctionnalité→fichier,
+modèle de données — `cellNotes` manquait dans le schéma racine, corrigé au
+passage —, pièges connus).
 
 ## Session précédente
 
