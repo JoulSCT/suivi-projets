@@ -1,132 +1,117 @@
+[ÉTAT.md](https://github.com/user-attachments/files/34797902/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
 
-**Refonte de la structure de l'agenda : fusion ligne/événement, notes libres
-par case** (21/08/2026).
+**5 fonctionnalités demandées par Jul suite à la revue critique de l'app**
+(13/11/2026) :
 
-Après plusieurs allers-retours sur l'ergonomie du calendrier (voir sessions
-précédentes), Jul a formulé une demande précise et confirmée avec elle avant
-codage :
-- Suppression de l'étape « créer un groupe » séparée, qui précédait la
-  création d'un événement.
-- Un événement se crée désormais **directement** : nom, responsable,
-  catégorie (facultative, remplace le choix d'un groupe existant), date,
-  récurrence, couleur, mois de préparation — en un seul bloc de champs.
-- Cet événement devient **lui-même la ligne** du tableau (plus de gestion de
-  ligne séparée).
-- Sur cette ligne, on peut ensuite cliquer n'importe quelle autre case de
-  mois pour y ajouter une **note libre** indépendante (ex. « créer
-  formulaire » en novembre, « envoi formulaire » en décembre), sans passer
-  par un formulaire complet.
+1. ✅ **Export RA (rapports d'activité) : classification ordonnée par
+   projet puis sous-projet, colonnes identiques et alignées**
+   (`10-actions-projects-export.js`) :
+   - `getRaFilteredTasks()` enrichit chaque tâche avec `projectName`/
+     `subProjectName` (séparés) et trie désormais par projet puis
+     sous-projet (ordre alphabétique), puis par date de réalisation
+     décroissante au sein d'un même groupe — au lieu d'un simple tri par
+     date.
+   - `exportRaExcel()` (CSV) et la feuille « Rapport activités » de
+     `exportExcel()` ont une colonne « Sous-projet » dédiée en plus de
+     « Projet ».
+   - `exportRaWord()` : **bug corrigé** — les cellules `<td>` généraient du
+     HTML sans balise fermée (`style="..."` jamais suivi de `>`), cause
+     probable du désalignement visuel signalé. Les tableaux ont maintenant
+     une largeur de colonnes fixe et identique (`table-layout:fixed` +
+     `colgroup`) dans toutes les sections, avec un sous-titre dédié par
+     sous-projet.
+2. ✅ **Barre de recherche globale** (`02-render-root.js` pour la logique
+   et le rendu, `14-event-delegation.js` pour la saisie/Échap/clic,
+   `styles.css` pour le style) : champ de recherche dans la sidebar,
+   résultats groupés par type (projets, tâches, vigilances/perspectives,
+   séances, pages, suivi continu, événements calendrier, notes rapides),
+   affichés à la place de la vue courante tant qu'une recherche est
+   active. Tout clic sur un résultat (ou toute autre action) efface
+   automatiquement la recherche et navigue normalement.
+3. ✅ **Champs de texte riche redimensionnables** (`styles.css`,
+   `.rte-body`) : `resize:vertical` ajouté, hauteur max relevée de 220px à
+   600px. Les `<textarea>` classiques l'avaient déjà.
+4. ✅ **Sauvegarde JSON automatique périodique** (`12-reminder-epv.js`,
+   `checkAutoExport()` + `AUTO_EXPORT_KEY`/`AUTO_EXPORT_INTERVAL_MS`) :
+   toutes les 24h, un export JSON est déclenché automatiquement au
+   chargement de l'app (téléchargement silencieux, sans clic), en plus du
+   rappel hebdomadaire existant (qui reste pour le cas où l'auto-export
+   serait bloqué). `exportJson(isAuto)` accepte maintenant un paramètre
+   optionnel pour nommer le fichier et adapter le message de bannière.
+5. ✅ **Panneau « Échéances à venir » (30 jours) sur l'accueil**
+   (`03-home.js`, `getUpcomingDeadlines()`) : affiché en 2 colonnes à côté
+   du panneau « Préparation du mois » existant (qui a aussi gagné un état
+   vide explicite au lieu de disparaître). Combine tâches ouvertes à
+   échéance proche et événements du calendrier dont le mois chevauche la
+   fenêtre de 30 jours (granularité mensuelle des événements — voir piège
+   #11 d'`ARCHITECTURE.md`).
 
-Modifications (`04-calendar.js`, `14-event-delegation.js`, `08-modals.js`,
-`01-core.js`, `11-import.js`) :
-- **`CalendarRow` et `CalendarEvent` sont désormais toujours liés 1:1.**
-  Créer un événement (bouton unique « + Nouvel événement ») crée sa ligne en
-  même temps ; l'éditer resynchronise `label`/`sub`/`category` de la ligne ;
-  le supprimer supprime la ligne en cascade.
-- Le sélecteur « Groupe de projet » de la modale événement est remplacé par
-  un champ **Catégorie** libre (avec suggestions des catégories existantes).
-- `renderCalRowModalInner` et tout le flux `*-cal-row` (add/edit/save/delete)
-  sont **retirés** — n'existent plus.
-- Nouveau modèle **`CalendarCellNote`** (`{id, rowId, year, month, text}`),
-  stocké dans `cal.cellNotes[]` : notes libres par case, gérées par
-  `add-cal-note`/`edit-cal-note`/`save-cal-note`/`delete-cal-note` et la
-  nouvelle modale `renderCalNoteModalInner`.
-- `cal.cellNotes` initialisé dans `defaultData()`/`loadData()` (comme
-  `rows`/`events`) et restauré par `importFullBackup()` — bug potentiel de
-  perte de données repéré et corrigé au passage (l'import écrasait le
-  calendrier sans jamais restaurer `cellNotes`).
-- `ARCHITECTURE.md` mis à jour (modèle de données, plus aucune mention du
-  double chemin de création).
+**2 corrections suite au retour de Jul sur le tableau de bord** (même jour) :
 
-Contrôle anti-régression : `node --check` OK sur les 5 fichiers touchés et
-le bundle final. Recherche exhaustive de références résiduelles aux
-identifiants supprimés (`cal-row`, `cr-label`, `cr-ev-*`, etc.) — aucune
-trouvée. Script de fumée dédié (18 assertions) couvrant tout le nouveau
-cycle : création directe (ligne auto-créée avec le bon label/sub/category),
-édition (resynchronisation de la ligne), notes libres (création, édition,
-suppression par texte vidé), suppression en cascade (événement + ligne +
-notes) — tous corrects. Re-validation du script de fumée existant sur la
-fenêtre de préparation à cheval sur 2 années (session précédente,
-`prepEvents`) — comportement inchangé, non affecté par cette refonte.
+6. ✅ **Le « Total » du tableau de bord (onglet Tâches) ne correspondait pas
+   à la somme À faire + En cours + Terminées** (`05-dashboard.js`,
+   `renderTasksDashboard`). Cause : la carte « Terminées » ne comptait que
+   le statut exact `fait`, en excluant `fait (R.A.)` et `non réalisé` —
+   des tâches qui comptaient pourtant dans le Total. Corrigé : « Terminées »
+   regroupe désormais les 3 statuts de fin (`DONE_STATUSES`), ce qui rend
+   Total = À faire + En cours + Terminées **toujours** exact (identité
+   mathématique, les 5 statuts possibles se répartissant entièrement dans
+   ces 3 cases). Le filtre déclenché en cliquant la carte a été adapté en
+   conséquence (nouveau marqueur interne `'__done__'`, qui agrège les 3
+   statuts, distinct du filtre précis par statut individuel toujours
+   disponible dans le menu déroulant). « En retard » reste affiché à part
+   avec une infobulle explicite : c'est un sous-ensemble de À faire/En
+   cours (une tâche en retard est aussi « à faire » ou « en cours »), donc
+   il ne s'additionne pas aux 3 autres cases — ça ne pouvait de toute façon
+   pas être « réparé » autrement sans changer le sens de la donnée.
+7. ✅ **Rapport d'activités (vue à l'écran, onglet Tableau de bord) : pas
+   d'alignement entre les tableaux de chaque projet** (`05-dashboard.js`,
+   `renderRaDashboard`). Même cause de fond que le bug Word de ce jour :
+   chaque projet avait son propre `<table>` qui ajustait ses colonnes
+   indépendamment selon son contenu. Réécrit pour réutiliser
+   `getRaFilteredTasks()` (classification projet → sous-projet déjà
+   triée, cohérente avec les exports Excel/Word) et appliquer les mêmes
+   largeurs de colonnes fixes (`table-layout:fixed` + `colgroup`) à tous
+   les tableaux.
 
-## Session précédente (même jour)
+Contrôle anti-régression : `node --check` sur les 7 fichiers touchés et sur
+le bundle final. Script de fumée dédié (16 assertions, chargé via `eval` du
+bundle extrait + `state` de test construit à la main) couvrant : tri
+projet/sous-projet de `getRaFilteredTasks`, 4 cas de recherche (page, note,
+événement, vigilance, et requête sans résultat), inclusion/exclusion
+correcte dans `getUpcomingDeadlines` (tâche ouverte incluse, tâche déjà
+faite exclue, événement du mois en cours inclus, tri chronologique),
+`exportJson(true)` sans erreur, identité Total = À faire + En cours +
+Terminées sur le tableau de bord, présence de `table-layout:fixed` +
+`colgroup` dans `renderRaDashboard`. `ARCHITECTURE.md` mis à jour (carte
+fonctionnalité→fichier, modèle de données — `cellNotes` manquait dans le
+schéma racine, corrigé au passage —, pièges connus).
 
-**Ajout du champ Responsable sur les événements du calendrier.**
+## Session précédente
 
-Demande de Jul : pouvoir renseigner, sur un événement du calendrier annuel,
-un nom, une personne responsable, un groupe de projet, une date (avec
-année), la récurrence annuelle, les mois de préparation et une couleur — le
-tout en un seul bloc de champs, visible et modifiable depuis le calendrier.
-Constat : tout existait déjà sauf le champ **Responsable**, absent du modèle
-`CalendarEvent` (qui n'existait que pour les tâches).
-
-Modifications :
-- Nouveau champ `responsable` (texte libre) ajouté au modèle `CalendarEvent`
-  et documenté dans `ARCHITECTURE.md` (le modèle Event/Row n'avait d'ailleurs
-  jamais été formellement documenté — comblé au passage).
-- Ajouté aux **deux chemins de création** existant à l'époque
-  (`renderCalEventModalInner` et le formulaire intégré `cr-ev-*` de
-  `renderCalRowModalInner`, tous deux dans `04-calendar.js`) et à leurs
-  **deux handlers de sauvegarde** (`save-cal-event` et `save-cal-row`, dans
-  `14-event-delegation.js`). **Note : ce double chemin n'existe plus** — voir
-  la refonte ci-dessus (même jour, session plus récente) qui l'a remplacé
-  par un chemin de création unique.
-- Affiché en petit texte sous le nom de l'événement dans la grille du
-  calendrier (`04-calendar.js`), et dans le panneau « Préparation projets du
-  mois » de la page d'accueil (`03-home.js`) quand renseigné.
-
-Contrôle anti-régression : `node --check` OK sur les 3 fichiers touchés
-(`03-home.js`, `04-calendar.js`, `14-event-delegation.js`) et sur le bundle
-final. Script de fumée validant l'enregistrement du responsable sur le
-chemin de création principal, et confirmant que `getPreparationReminders()`
-reste fonctionnelle avec ce nouveau champ optionnel présent.
-
-## Session précédente (même jour)
-
-**4 corrections/améliorations** :
-
-1. ✅ **Notes rapides rendues modifiables** (`03-home.js` + `01-core.js` +
-   `14-event-delegation.js`) : clic sur le texte d'une note → passe en
-   édition inline (input pré-rempli, focus automatique), Entrée ou clic
-   ailleurs sauvegarde, Échap annule. Nouvel indicateur transitoire
-   `state.editingQuickNoteId` (non persisté, purement UI).
-2. ✅ **Bug de préparation à cheval sur 2 années, dans le calendrier lui-même**
-   (`04-calendar.js`, `renderCalendar`) : pour un événement **non récurrent**
-   dont la fenêtre de préparation tombait entièrement ou partiellement dans
-   l'année précédente, elle n'était jamais affichée (le débordement d'année
-   n'était géré que pour les événements récurrents, via une astuce
-   auto-référentielle qui ne s'applique pas à un événement ponctuel).
-   Réécrit pour distinguer clairement la « portion directe » (dans l'année
-   propre de l'événement) de la « portion de débordement » (dans l'année
-   précédente), appliquées de façon cohérente que l'événement soit récurrent
-   ou non — pour un non-récurrent, en consultant réellement l'événement de
-   l'année suivante dans les données. Comportement des événements récurrents
-   inchangé (vérifié par script de fumée, résultats identiques à avant).
-3. ✅ **Légende couleurs retirée** au-dessus du tableau du calendrier annuel
-   (jugée inutile) — les couleurs restent choisissables dans les modales
-   d'événement/groupe, et l'icône ↻ reste visible sur chaque événement
-   récurrent individuellement.
-4. ✅ **Bug visuel de double puce dans le tableau de bord des vigilances**
-   (`05-dashboard.js`, `renderVigilancesDashboard`) : même cause qu'un bug
-   déjà corrigé en vue projet (liste `<ul><li>` imbriquée dans le texte
-   riche, sans la classe CSS qui neutralise sa puce native), mais ce
-   tableau du dashboard global n'avait jamais eu cette classe appliquée.
-   Corrigé en réutilisant la classe `vigilance-text` déjà existante
-   (`styles.css` non modifié, la règle CSS existait déjà).
+**Refonte de la structure de l'agenda : fusion ligne/événement, notes
+libres par case** (21/08/2026) — suppression de l'étape « créer un groupe »
+séparée ; un événement se crée directement (nom, responsable, catégorie,
+date, récurrence, couleur, mois de préparation) et devient lui-même la
+ligne du tableau (`CalendarRow`/`CalendarEvent` toujours liés 1:1) ; notes
+libres indépendantes par case (`CalendarCellNote`). Voir §2 d'`ARCHITECTURE.md`
+pour le modèle de données complet.
 
 ## Prochaine étape
 
-- Tester en conditions réelles la nouvelle structure de l'agenda (voir
-  dernière session) et ajuster si besoin après usage.
-- Pistes non planifiées, en attente : images dans les notes ; import du PV du
-  Kanban collaboratif (`board-suivi-projet.html`) avec routage par tâche.
+- Tester en conditions réelles les 5 nouvelles fonctionnalités (recherche,
+  export RA, sauvegarde auto, échéances à venir, champs redimensionnables)
+  et les 2 corrections du tableau de bord, puis ajuster si besoin après
+  usage.
+- Pistes non planifiées, en attente : images dans les notes ; import du PV
+  du Kanban collaboratif (`board-suivi-projet.html`) avec routage par
+  tâche.
 
 ## Bugs connus
 
 Aucun. Voir §4 « Pièges connus / zones fragiles » d'`ARCHITECTURE.md` pour
-les zones à surveiller lors de futures modifications (pas des bugs actuels,
-des risques de régression si on y touche sans précaution).
-
+les zones à surveiller lors de futures modifications (pas des bugs
+actuels, des risques de régression si on y touche sans précaution).
