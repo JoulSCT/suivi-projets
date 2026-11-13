@@ -114,15 +114,31 @@ function upcomingItemKey(item){
 // persisté tel qu'affiché, en silence (sans re-rendu).
 function reorderUpcoming(draggedKey, targetKey, after){
   if(!draggedKey || !targetKey || draggedKey===targetKey) return;
-  const listEl = document.getElementById('upcoming-list');
-  if(!listEl) return;
-  const children = [...listEl.children];
-  const draggedEl = children.find(el => el.getAttribute && el.getAttribute('data-upcoming-key')===draggedKey);
-  const targetEl = children.find(el => el.getAttribute && el.getAttribute('data-upcoming-key')===targetKey);
-  if(!draggedEl || !targetEl) return;
-  if(after) targetEl.after(draggedEl); else targetEl.before(draggedEl);
-  state.data.upcomingOrder = [...listEl.children].map(el => el.getAttribute('data-upcoming-key'));
-  saveData();
+  try {
+    const listEl = document.getElementById('upcoming-list');
+    if(!listEl) throw new Error('upcoming-list introuvable');
+    const children = [...listEl.children];
+    const draggedEl = children.find(el => el.getAttribute && el.getAttribute('data-upcoming-key')===draggedKey);
+    const targetEl = children.find(el => el.getAttribute && el.getAttribute('data-upcoming-key')===targetKey);
+    if(!draggedEl || !targetEl) throw new Error('élément introuvable');
+    if(after) targetEl.after(draggedEl); else targetEl.before(draggedEl);
+    state.data.upcomingOrder = [...listEl.children].map(el => el.getAttribute('data-upcoming-key'));
+    saveData();
+  } catch(e){
+    // Filet de sécurité : si le déplacement direct du DOM échoue pour une
+    // raison quelconque, on retombe sur un calcul classique + re-rendu
+    // complet, pour que le glisser-déposer fonctionne toujours (quitte à
+    // être moins fluide) plutôt que de ne rien faire silencieusement.
+    const listEl2 = document.getElementById('upcoming-list');
+    if(!listEl2) return;
+    let keys = [...listEl2.querySelectorAll('.upcoming-item')].map(el => el.getAttribute('data-upcoming-key'));
+    keys = keys.filter(k => k !== draggedKey);
+    let idx = keys.indexOf(targetKey);
+    if(idx === -1) idx = keys.length - 1;
+    keys.splice(after ? idx+1 : idx, 0, draggedKey);
+    state.data.upcomingOrder = keys;
+    persistAndRender();
+  }
 }
 
 function renderHome(){
