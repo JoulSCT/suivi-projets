@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34806857/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34807074/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -197,6 +197,13 @@ pour le modèle de données complet.
     maintenant déplacé directement (`targetEl.after/before(draggedEl)`),
     sans redessiner le reste de la page ; l'ordre est ensuite sauvegardé en
     silence (`saveData()` seul, sans `render()`).
+17. ✅ **Filet de sécurité ajouté sur `reorderUpcoming()`** : le
+    déplacement direct du nœud DOM (point 16) est maintenant entouré d'un
+    `try/catch` — en cas d'échec pour une raison quelconque (élément non
+    trouvé, etc.), l'app retombe automatiquement sur l'ancien comportement
+    (recalcul de l'ordre + re-rendu complet via `persistAndRender()`), pour
+    que le glisser-déposer fonctionne toujours, quitte à être moins fluide
+    dans ce cas de repli, plutôt que de ne rien faire silencieusement.
 
 ## Prochaine étape
 
