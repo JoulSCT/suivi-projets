@@ -17,7 +17,9 @@ function renderModal(){
   else if(state.modal.type==='project'){ inner = renderProjectModalInner(); wide = ' xwide'; }
   else { inner = '<p style="color:var(--ink-soft);">Type de modale inconnu : '+escapeHtml(String(state.modal.type))+'</p><div class="form-actions"><button class="btn btn-ghost" data-action="close-modal">Fermer</button></div>'; }
   return '<div class="modal-overlay" data-action="close-modal">' +
-    '<div class="modal-card' + wide + '" data-action="noop">' + inner + '</div>' +
+    '<div class="modal-card' + wide + '" data-action="noop">' +
+      '<div class="modal-card-inner">' + inner + '</div>' +
+    '</div>' +
   '</div>';
 }
 
@@ -67,6 +69,22 @@ function renderEditTaskModalInner(){
       '<select id="et-statut">' +
         STATUS_LIST.map(s=>'<option value="'+s+'"'+(t.statut===s?' selected':'')+'>'+s+'</option>').join('') +
       '</select>' +
+    '</div>' +
+    '<div class="form-row" style="background:#FFFBF0;border:1px solid #E8D870;border-radius:8px;padding:10px 14px;">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;font-family:var(--font-body);margin-bottom:'+(t.priority?'8px':'0')+';">' +
+        '<input type="checkbox" id="et-priority" style="width:14px;height:14px;accent-color:#7A5800;"'+(t.priority?' checked':'')+' onchange="document.getElementById(\'et-prio-date-wrap\').style.display=this.checked?\'flex\':\'none\'">' +
+        '⭐ Marquer comme prioritaire' +
+      '</label>' +
+      '<div id="et-prio-date-wrap" style="display:'+(t.priority?'flex':'none')+';align-items:center;gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:.82rem;color:var(--ink-soft);">Afficher à partir du :</span>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;font-family:var(--font-body);text-transform:none;letter-spacing:0;color:var(--ink-soft);">' +
+          '<input type="radio" name="et-prio-when" value="now"'+(t.priorityFrom?'':' checked')+' style="accent-color:#7A5800;"> Maintenant' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;font-family:var(--font-body);text-transform:none;letter-spacing:0;color:var(--ink-soft);">' +
+          '<input type="radio" name="et-prio-when" value="later"'+(t.priorityFrom?' checked':'')+' style="accent-color:#7A5800;"> Date :' +
+          '<input type="date" id="et-prio-date" value="'+escapeHtml(t.priorityFrom||'')+'" style="padding:4px 7px;border:1px solid var(--paper-line);border-radius:5px;font-family:inherit;font-size:.8rem;margin-left:4px;">' +
+        '</label>' +
+      '</div>' +
     '</div>' +
     '<div class="form-row" style="background:var(--blush);border-radius:8px;padding:10px 14px;">' +
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;font-family:var(--font-body);margin-bottom:6px;">' +

@@ -84,7 +84,42 @@ function getUpcomingDeadlines(){
     });
   });
 
-  return [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+  const items = [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+  items.forEach(it => { it.key = upcomingItemKey(it); });
+
+  // Ordre manuel (glisser-déposer) : state.data.upcomingOrder est la liste
+  // des clés dans l'ordre choisi par l'utilisateur. Les items qui y figurent
+  // gardent cet ordre ; les items absents (nouveaux depuis le dernier
+  // réarrangement) sont ajoutés à la suite, triés par date comme avant.
+  const order = state.data.upcomingOrder || [];
+  if(order.length){
+    const byKey = new Map(items.map(it => [it.key, it]));
+    const ordered = order.map(k => byKey.get(k)).filter(Boolean);
+    const orderedKeys = new Set(ordered.map(it => it.key));
+    const rest = items.filter(it => !orderedKeys.has(it.key));
+    return [...ordered, ...rest];
+  }
+  return items;
+}
+
+function upcomingItemKey(item){
+  return item.kind==='task' ? ('task:'+item.task.taskId) : ('event:'+item.event.id);
+}
+
+// Réordonne manuellement les "Échéances à venir" après un glisser-déposer :
+// reconstruit l'ordre complet depuis l'ordre actuellement affiché à l'écran
+// (lu dans le DOM), avec draggedKey déplacé juste avant/après targetKey.
+function reorderUpcoming(draggedKey, targetKey, after){
+  if(!draggedKey || !targetKey || draggedKey===targetKey) return;
+  const listEl = document.getElementById('upcoming-list');
+  if(!listEl) return;
+  let keys = [...listEl.querySelectorAll('.upcoming-item')].map(el => el.getAttribute('data-upcoming-key'));
+  keys = keys.filter(k => k !== draggedKey);
+  let idx = keys.indexOf(targetKey);
+  if(idx === -1) idx = keys.length - 1;
+  keys.splice(after ? idx+1 : idx, 0, draggedKey);
+  state.data.upcomingOrder = keys;
+  persistAndRender();
 }
 
 function renderHome(){
@@ -268,11 +303,13 @@ function renderHome(){
         '</div>' +
         (upcoming.length===0
           ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune échéance dans les 30 prochains jours.</p>'
-          : '<div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
+          : '<div id="upcoming-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
               upcoming.map(item => {
+                const key = item.key || upcomingItemKey(item);
                 if(item.kind==='task'){
                   const t = item.task;
-                  return '<div data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                  return '<div class="upcoming-item" draggable="true" data-upcoming-key="'+key+'" data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:grab;">' +
+                    '<span style="font-size:.75rem;color:var(--ink-soft);cursor:grab;" title="Glisser pour réordonner">⠿</span>' +
                     '<span style="font-size:.85rem;">☑</span>' +
                     '<div style="flex:1;min-width:0;">' +
                       '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(t.description)+'</div>' +
@@ -282,7 +319,8 @@ function renderHome(){
                 }
                 const ev = item.event;
                 const rowLabel = item.row ? item.row.label : '';
-                return '<div data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                return '<div class="upcoming-item" draggable="true" data-upcoming-key="'+key+'" data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:grab;">' +
+                  '<span style="font-size:.75rem;color:var(--ink-soft);cursor:grab;" title="Glisser pour réordonner">⠿</span>' +
                   '<span style="font-size:.85rem;">📌</span>' +
                   '<div style="flex:1;min-width:0;">' +
                     '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(ev.text||rowLabel)+'</div>' +

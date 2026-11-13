@@ -622,6 +622,20 @@ document.getElementById('app').addEventListener('click', function(e){
       m.task.echeance = noDate ? '' : document.getElementById('et-date').value;
       setTaskStatut(m.task, document.getElementById('et-statut').value);
 
+      // Priorité (⭐) : même logique que l'ajout direct de tâche / les points
+      // de vigilance EPV — cocher rend prioritaire immédiatement ou à partir
+      // d'une date choisie ; décocher retire la priorité.
+      const etPrioCheckbox = document.getElementById('et-priority');
+      if(etPrioCheckbox && etPrioCheckbox.checked){
+        const etPrioWhen = document.querySelector('input[name="et-prio-when"]:checked');
+        const etPrioDate = document.getElementById('et-prio-date');
+        m.task.priority = true;
+        m.task.priorityFrom = (etPrioWhen && etPrioWhen.value==='later' && etPrioDate && etPrioDate.value) ? etPrioDate.value : null;
+      } else if(etPrioCheckbox){
+        m.task.priority = false;
+        m.task.priorityFrom = null;
+      }
+
       // Handle move to another project
       const moveToggle = document.getElementById('et-move-toggle');
       const moveTarget = document.getElementById('et-move-target');
@@ -1011,5 +1025,49 @@ document.getElementById('app').addEventListener('keydown', function(e){
       persistAndRender();
     }
   }
+});
+
+/* ============== DRAG & DROP — Échéances à venir ============== */
+// Réordonnement manuel des tâches/événements du panneau "Échéances à venir"
+// (accueil). HTML5 drag-and-drop natif ; la coexistence avec le clic normal
+// (data-action="open-edit-task" / "edit-cal-event") fonctionne nativement :
+// un vrai clic (sans déplacement de souris) ne déclenche jamais dragstart.
+document.getElementById('app').addEventListener('dragstart', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.dataTransfer.setData('text/plain', item.getAttribute('data-upcoming-key'));
+  e.dataTransfer.effectAllowed = 'move';
+  item.classList.add('dragging');
+});
+
+document.getElementById('app').addEventListener('dragover', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.preventDefault();
+  item.classList.add('drag-over');
+});
+
+document.getElementById('app').addEventListener('dragleave', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(item) item.classList.remove('drag-over');
+});
+
+document.getElementById('app').addEventListener('drop', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.preventDefault();
+  item.classList.remove('drag-over');
+  const draggedKey = e.dataTransfer.getData('text/plain');
+  const targetKey = item.getAttribute('data-upcoming-key');
+  // Dépose dans la moitié basse de l'élément cible -> juste après lui.
+  const rect = item.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height/2;
+  reorderUpcoming(draggedKey, targetKey, after);
+});
+
+document.getElementById('app').addEventListener('dragend', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(item) item.classList.remove('dragging');
+  document.querySelectorAll('.upcoming-item.drag-over').forEach(el=>el.classList.remove('drag-over'));
 });
 
