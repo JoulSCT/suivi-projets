@@ -62,21 +62,43 @@ function deleteProject(id){
   render();
 }
 
-function exportJson(){
+function exportJson(isAuto){
   const blob = new Blob([JSON.stringify(state.data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'suivi-projets-export.json';
+  a.href = url; a.download = isAuto ? 'suivi-projets-sauvegarde-auto-'+todayStr()+'.json' : 'suivi-projets-export.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   stampExportTime();
-  showBanner('Export téléchargé. Prochaine sauvegarde recommandée dans 7 jours.', 'success');
+  if(isAuto){
+    showBanner('Sauvegarde automatique effectuée (fichier JSON téléchargé).', 'info');
+  } else {
+    showBanner('Export téléchargé. Prochaine sauvegarde recommandée dans 7 jours.', 'success');
+  }
 }
 
 function getRaFilteredTasks(){
   const all = getAllTasks();
+  // Classification ordonnée par projet (top-level) puis sous-projet, puis
+  // date de réalisation décroissante au sein d'un même groupe.
   const raTasks = all.filter(t=>t.statut==='fait (R.A.)')
-    .sort((a,b)=>{ const da=a.completedAt||a.echeance||'0000',db=b.completedAt||b.echeance||'0000'; return db.localeCompare(da); });
+    .map(t=>{
+      const proj = getProject(t.projectId);
+      const isChild = !!(proj && proj.parentId);
+      const parent = isChild ? getProject(proj.parentId) : null;
+      return Object.assign({}, t, {
+        projectName: parent ? parent.name : (proj ? proj.name : ''),
+        subProjectName: isChild ? (proj ? proj.name : '') : ''
+      });
+    })
+    .sort((a,b)=>{
+      const pc = a.projectName.localeCompare(b.projectName, 'fr');
+      if(pc !== 0) return pc;
+      const sc = a.subProjectName.localeCompare(b.subProjectName, 'fr');
+      if(sc !== 0) return sc;
+      const da=a.completedAt||a.echeance||'0000',db=b.completedAt||b.echeance||'0000';
+      return db.localeCompare(da);
+    });
   const selYear = state.raYear || new Date().getFullYear().toString();
   if(selYear==='all') return raTasks;
   return raTasks.filter(t=>{ const y=(t.completedAt||t.echeance||'').slice(0,4); return y===selYear; });
@@ -122,15 +144,32 @@ function exportExcel(){
     XLSX.utils.book_append_sheet(wb, wsVig, 'Vigilances');
   }
 
-  /* ---- Sheet 3 : Rapport d'activités (Fait R.A.) ---- */
-  const raTasks = getAllTasks().filter(t => t.statut === 'fait (R.A.)');
+  /* ---- Sheet 3 : Rapport d'activités (Fait R.A., toutes années) ---- */
+  // Classification ordonnée par projet puis sous-projet, colonnes identiques
+  // (voir aussi getRaFilteredTasks utilisé par les exports RA dédiés) — mais
+  // sans filtre d'année : cette feuille fait partie de l'export complet.
+  const raTasks = getAllTasks().filter(t => t.statut === 'fait (R.A.)')
+    .map(t=>{
+      const proj = getProject(t.projectId);
+      const isChild = !!(proj && proj.parentId);
+      const parent = isChild ? getProject(proj.parentId) : null;
+      return Object.assign({}, t, {
+        projectName: parent ? parent.name : (proj ? proj.name : ''),
+        subProjectName: isChild ? (proj ? proj.name : '') : ''
+      });
+    })
+    .sort((a,b)=>{
+      const pc = a.projectName.localeCompare(b.projectName, 'fr');
+      if(pc !== 0) return pc;
+      const sc = a.subProjectName.localeCompare(b.subProjectName, 'fr');
+      if(sc !== 0) return sc;
+      return (b.completedAt||'').localeCompare(a.completedAt||'');
+    });
   if(raTasks.length > 0){
-    const raHeader = ['Projet', 'Origine', 'Réalisation', 'Responsable', 'Date réalisation'];
-    const raRows = raTasks
-      .sort((a,b) => (b.completedAt||'').localeCompare(a.completedAt||''))
-      .map(t => [t.projectPath, t.originLabel, t.description, t.responsable||'', t.completedAt||t.echeance||'']);
+    const raHeader = ['Projet', 'Sous-projet', 'Origine', 'Réalisation', 'Responsable', 'Date réalisation'];
+    const raRows = raTasks.map(t => [t.projectName, t.subProjectName, t.originLabel, t.description, t.responsable||'', t.completedAt||t.echeance||'']);
     const wsRa = XLSX.utils.aoa_to_sheet([raHeader, ...raRows]);
-    wsRa['!cols'] = [{wch:28},{wch:20},{wch:55},{wch:16},{wch:16}];
+    wsRa['!cols'] = [{wch:24},{wch:24},{wch:20},{wch:50},{wch:16},{wch:16}];
     XLSX.utils.book_append_sheet(wb, wsRa, 'Rapport activités');
   }
 
@@ -163,9 +202,9 @@ function exportRaExcel(){
   const selYear = state.raYear || new Date().getFullYear().toString();
   const label = selYear==='all' ? 'Toutes années' : selYear;
   const BOM = '\uFEFF';
-  const rows = [['Projet','Origine','Réalisation','Responsable','Date de réalisation']];
+  const rows = [['Projet','Sous-projet','Origine','Réalisation','Responsable','Date de réalisation']];
   tasks.forEach(t => rows.push([
-    t.projectPath, t.originLabel, t.description,
+    t.projectName, t.subProjectName, t.originLabel, t.description,
     t.responsable||'',
     t.completedAt||t.echeance||''
   ]));
@@ -180,24 +219,47 @@ function exportRaWord(){
   const tasks = getRaFilteredTasks();
   const selYear = state.raYear || new Date().getFullYear().toString();
   const label = selYear==='all' ? '' : ' '+selYear;
-  const byProject = {};
+  // Groupes ordonnés par projet puis sous-projet (déjà triés par
+  // getRaFilteredTasks) — on respecte cet ordre sans re-grouper par un
+  // simple objet (qui ne garantit pas l'ordre d'insertion de façon fiable
+  // une fois les clés mélangées).
+  const groups = [];
   tasks.forEach(t=>{
-    if(!byProject[t.projectPath]) byProject[t.projectPath]=[];
-    byProject[t.projectPath].push(t);
+    const last = groups[groups.length-1];
+    if(last && last.projectName===t.projectName && last.subProjectName===t.subProjectName){
+      last.tasks.push(t);
+    } else {
+      groups.push({ projectName:t.projectName, subProjectName:t.subProjectName, tasks:[t] });
+    }
   });
   const td = 'border:1px solid #ccc;padding:6px 10px;';
-  const o = '\x3c'; const c = '\x3e'; // < and > via hex to avoid HTML parser confusion
-  const projectSections = Object.entries(byProject).map(([proj,tks])=>{
-    const rows = tks.map(t=>
+  const o = '\x3c'; const c = '\x3e'; // < et > via hex pour éviter toute confusion avec le parseur HTML
+  // Largeurs de colonnes fixes et identiques pour TOUTES les sections, afin
+  // que les tableaux de chaque projet soient visuellement alignés entre eux.
+  const colgroup = o+'colgroup'+c +
+    o+'col style="width:18%;"'+c + o+'col style="width:42%;"'+c +
+    o+'col style="width:20%;"'+c + o+'col style="width:20%;"'+c +
+    o+'/colgroup'+c;
+  let lastProjectHeading = null;
+  const projectSections = groups.map(g=>{
+    const rows = g.tasks.map(t=>
       o+'tr'+c+
-      o+'td style="'+td+'"'+(t.originLabel||'')+o+'/td'+c+
-      o+'td style="'+td+'"'+(t.description||'')+o+'/td'+c+
-      o+'td style="'+td+'"'+(t.responsable||'')+o+'/td'+c+
-      o+'td style="'+td+'"'+(t.completedAt||t.echeance||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.originLabel||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.description||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.responsable||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.completedAt||t.echeance||'')+o+'/td'+c+
       o+'/tr'+c
     ).join('');
-    return o+'h2 style="font-family:Arial;font-size:13pt;color:#1F3A5C;margin:18pt 0 6pt;"'+c+escapeHtml(proj)+o+'/h2'+c+
-      o+'table style="border-collapse:collapse;width:100%;font-family:Arial;font-size:10pt;"'+c+
+    const heading = g.projectName !== lastProjectHeading
+      ? o+'h2 style="font-family:Arial;font-size:13pt;color:#1F3A5C;margin:18pt 0 4pt;"'+c+escapeHtml(g.projectName)+o+'/h2'+c
+      : '';
+    lastProjectHeading = g.projectName;
+    const subHeading = g.subProjectName
+      ? o+'h3 style="font-family:Arial;font-size:11pt;color:#2E86C1;margin:4pt 0 6pt;"'+c+escapeHtml(g.subProjectName)+o+'/h3'+c
+      : '';
+    return heading + subHeading +
+      o+'table style="border-collapse:collapse;width:100%;table-layout:fixed;font-family:Arial;font-size:10pt;"'+c+
+      colgroup+
       o+'thead'+c+o+'tr style="background:#E8EFF5;"'+c+
       o+'th style="'+td+'text-align:left;"'+c+'Origine'+o+'/th'+c+
       o+'th style="'+td+'text-align:left;"'+c+'Réalisation'+o+'/th'+c+
@@ -205,7 +267,7 @@ function exportRaWord(){
       o+'th style="'+td+'text-align:left;"'+c+'Date'+o+'/th'+c+
       o+'/tr'+c+o+'/thead'+c+
       o+'tbody'+c+rows+o+'/tbody'+c+o+'/table'+c;
-  }).join(o+'br'+c);
+  }).join('');
   const docHtml = [
     o+'html xmlns:o="urn:schemas-microsoft-com:office:office"',
     ' xmlns:w="urn:schemas-microsoft-com:office:word"',

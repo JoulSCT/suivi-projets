@@ -11,7 +11,13 @@ document.getElementById('app').addEventListener('click', function(e){
   const pid = el.getAttribute('data-pid');
   const idx = el.getAttribute('data-idx');
 
+  // Quitter le mode "résultats de recherche" dès qu'une action de
+  // navigation (ou toute autre action) est déclenchée — sauf celle qui
+  // sert justement à effacer la recherche.
+  if(action !== 'clear-search') state.searchQuery = '';
+
   switch(action){
+    case 'clear-search': state.searchQuery=''; render(); break;
     case 'open-dashboard': openDashboard(); break;
     case 'open-home': openHome(); break;
     case 'open-calendar': openCalendar(); break;
@@ -942,6 +948,12 @@ document.getElementById('app').addEventListener('input', function(e){
     state.draftPage.notes = t.value;
   } else if(t.id === 'qn-input'){
     state.homeNoteInput = t.value;
+  } else if(t.id === 'global-search-input'){
+    state.searchQuery = t.value;
+    const pos = t.selectionStart;
+    render();
+    const el2 = document.getElementById('global-search-input');
+    if(el2){ el2.focus(); try{ el2.setSelectionRange(pos, pos); }catch(e2){} }
   }
 });
 
@@ -982,6 +994,11 @@ document.getElementById('app').addEventListener('keydown', function(e){
   }
   if(e.key === 'Escape' && e.target.classList.contains('quick-note-edit-input')){
     state.editingQuickNoteId = null;
+    render();
+    return;
+  }
+  if(e.key === 'Escape' && e.target.id === 'global-search-input'){
+    state.searchQuery = '';
     render();
     return;
   }

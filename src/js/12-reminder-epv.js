@@ -19,6 +19,26 @@ async function checkWeeklyReminder(){
   } catch(e){}
 }
 
+/* ============== SAUVEGARDE JSON AUTOMATIQUE PÉRIODIQUE ============== */
+// Complète le rappel hebdomadaire ci-dessus (qui dépend d'un clic de Jul) :
+// toutes les 24h, un export JSON est déclenché automatiquement (téléchargé
+// en arrière-plan, sans action requise), pour ne jamais dépendre uniquement
+// du geste manuel. Chaque sauvegarde auto remet aussi à zéro le compteur du
+// rappel hebdomadaire (stampExportTime), évitant d'empiler les deux bannières.
+const AUTO_EXPORT_KEY = 'tracker-last-auto-export';
+const AUTO_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+
+async function checkAutoExport(){
+  try {
+    if(!state.data.projects || state.data.projects.length === 0) return; // rien à sauvegarder
+    const last = parseInt(localStorage.getItem(AUTO_EXPORT_KEY)||'0', 10);
+    if(!last || (Date.now() - last) > AUTO_EXPORT_INTERVAL_MS){
+      exportJson(true);
+      localStorage.setItem(AUTO_EXPORT_KEY, Date.now().toString());
+    }
+  } catch(e){}
+}
+
 /* ============== EVOLVING PV ============== */
 function getEPV(pid){ return (state.data.evolvingPV[pid] && state.data.evolvingPV[pid].entries) || []; }
 

@@ -41,6 +41,7 @@ let state = {
   dragProjectId: null,
   homeNoteInput: '',
   editingQuickNoteId: null,
+  searchQuery: '',
   calYear: new Date().getFullYear(),          // 'seances' | 'pages'
   draftSeance: null,
   draftPage: null,

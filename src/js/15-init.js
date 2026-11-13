@@ -8,6 +8,7 @@ async function init(){
     state.view = 'home';
     render();
     await checkWeeklyReminder();
+    if(!state.banner) await checkAutoExport();
     if(!state.banner && state.data.projects.length === 0){
       showBanner('Aucun projet trouvé dans cet outil. Si vous attendiez de retrouver des projets existants, utilisez « Importer (JSON) » pour les restaurer depuis une sauvegarde.', 'info');
     }

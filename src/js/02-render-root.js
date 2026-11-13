@@ -83,6 +83,10 @@ function renderSidebar(){
       '<p class="brand-mark">Suivi de Projets</p>' +
       '<p class="brand-sub">Procès-verbaux &amp; tâches</p>' +
     '</div>' +
+    '<div class="sidebar-search">' +
+      '<input type="text" id="global-search-input" placeholder="Rechercher…" autocomplete="off" value="'+escapeHtml(state.searchQuery||'')+'">' +
+      (state.searchQuery ? '<button class="clear-search-btn" data-action="clear-search" title="Effacer la recherche">✕</button>' : '') +
+    '</div>' +
     '<div class="nav-dashboard">' +
       '<button class="nav-item' + (state.view==='home'?' active':'') + '" data-action="open-home">' + ICONS.dashboard + '<span>Accueil</span></button>' +
       '<button class="nav-item' + (['dashboard','calendar'].includes(state.view)?' active':'') + '" data-action="open-dashboard">' +
@@ -105,6 +109,7 @@ function renderSidebar(){
 }
 
 function renderMain(){
+  if(state.searchQuery && state.searchQuery.trim()) return renderSearchResults();
   switch(state.view){
     case 'loading': return '<p class="page-sub">Chargement…</p>';
     case 'home': return renderHome();
@@ -139,5 +144,95 @@ function getPriorityTasksScheduled(){
   return getAllTasks().filter(t =>
     t.priority && !DONE_STATUSES.includes(t.statut) && t.priorityFrom && t.priorityFrom > today
   );
+}
+
+/* ============== RECHERCHE GLOBALE ============== */
+function searchAll(query){
+  const q = (query||'').trim().toLowerCase();
+  const results = { projects:[], tasks:[], seances:[], pages:[], vigilances:[], events:[], notes:[], epv:[] };
+  if(!q) return results;
+
+  state.data.projects.forEach(p => {
+    const hayP = [p.name||'', stripHtml(p.description||''), stripHtml(p.contacts||'')].join(' ').toLowerCase();
+    if(hayP.includes(q)) results.projects.push(p);
+    (p.vigilances||[]).forEach(v => { if(stripHtml(v.text||'').toLowerCase().includes(q)) results.vigilances.push({ project:p, text:v.text, isDev:false }); });
+    (p.developments||[]).forEach(d => { if(stripHtml(d.text||'').toLowerCase().includes(q)) results.vigilances.push({ project:p, text:d.text, isDev:true }); });
+
+    getSeances(p.id).forEach(s => {
+      const hayS = [s.title||'', stripHtml(s.notes||''), (s.conclusions||[]).map(stripHtml).join(' ')].join(' ').toLowerCase();
+      if(hayS.includes(q)) results.seances.push({ project:p, seance:s });
+    });
+    getPages(p.id).forEach(pg => {
+      const hayPg = [pg.title||'', stripHtml(pg.notes||'')].join(' ').toLowerCase();
+      if(hayPg.includes(q)) results.pages.push({ project:p, page:pg });
+    });
+    getEPV(p.id).forEach(entry => {
+      const hayE = [stripHtml(entry.notes||''), (entry.conclusions||[]).map(stripHtml).join(' ')].join(' ').toLowerCase();
+      if(hayE.includes(q)) results.epv.push({ project:p, entry });
+    });
+  });
+
+  getAllTasks().forEach(t => {
+    const hayT = [(t.description||''), (t.responsable||'')].join(' ').toLowerCase();
+    if(hayT.includes(q)) results.tasks.push(t);
+  });
+
+  (state.data.calendar && state.data.calendar.events || []).forEach(ev => {
+    const hayEv = [(ev.text||''), (ev.responsable||'')].join(' ').toLowerCase();
+    if(hayEv.includes(q)) results.events.push(ev);
+  });
+
+  (state.data.quickNotes||[]).forEach(n => {
+    if((n.text||'').toLowerCase().includes(q)) results.notes.push(n);
+  });
+
+  return results;
+}
+
+function renderSearchResults(){
+  const q = (state.searchQuery||'').trim();
+  const r = searchAll(q);
+  const total = r.projects.length + r.tasks.length + r.seances.length + r.pages.length + r.vigilances.length + r.events.length + r.notes.length + r.epv.length;
+
+  function card(action, attrs, icon, title, sub){
+    return '<div data-action="'+action+'" '+attrs+' style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--paper-line);border-radius:8px;cursor:pointer;">' +
+      '<span style="font-size:.9rem;flex-shrink:0;">'+icon+'</span>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-weight:600;font-size:.86rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+title+'</div>' +
+        (sub ? '<div style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+sub+'</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+  function section(title, items, fn){
+    if(!items.length) return '';
+    return '<div style="margin-bottom:22px;">' +
+      '<p class="home-section-title">'+escapeHtml(title)+' <span style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">('+items.length+')</span></p>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;">' + items.map(fn).join('') + '</div>' +
+    '</div>';
+  }
+
+  const body = total===0
+    ? '<p style="color:var(--ink-soft);font-size:.9rem;">Aucun résultat pour « '+escapeHtml(q)+' ».</p>'
+    : section('Projets', r.projects, p =>
+        card('open-project', 'data-id="'+p.id+'"', '📁', escapeHtml(p.name), escapeHtml(p.status||''))) +
+      section('Tâches', r.tasks, t =>
+        card('open-edit-task', 'data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'"', '☑', escapeHtml(t.description), escapeHtml(t.projectPath)+(t.echeance?' · '+fmtDate(t.echeance):''))) +
+      section('Vigilances &amp; perspectives', r.vigilances, v =>
+        card('open-project', 'data-id="'+v.project.id+'"', v.isDev?'➡':'⚠', escapeHtml(stripHtml(v.text).slice(0,120)), escapeHtml(v.project.name))) +
+      section('Séances (PV)', r.seances, x =>
+        card('open-seance', 'data-pid="'+x.project.id+'" data-id="'+x.seance.id+'"', '🗒', escapeHtml(x.seance.title||'Séance'), escapeHtml(x.project.name)+' · '+fmtDate(x.seance.date))) +
+      section('Pages', r.pages, x =>
+        card('open-page', 'data-pid="'+x.project.id+'" data-id="'+x.page.id+'"', '📄', escapeHtml(x.page.title), escapeHtml(x.project.name))) +
+      section('Suivi continu', r.epv, x =>
+        card('open-project', 'data-id="'+x.project.id+'"', '↻', escapeHtml(stripHtml(x.entry.notes||'').slice(0,120)||'(entrée sans notes)'), escapeHtml(x.project.name)+' · '+fmtDate(x.entry.date))) +
+      section('Événements du calendrier', r.events, ev =>
+        card('edit-cal-event', 'data-id="'+ev.id+'"', '📅', escapeHtml(ev.text||''), (ev.responsable?escapeHtml(ev.responsable)+' · ':'')+CAL_MONTHS_SHORT[ev.startMonth]+' '+ev.year)) +
+      section('Notes rapides', r.notes, n =>
+        card('open-home', '', '📝', escapeHtml(n.text), fmtDate(n.createdAt)));
+
+  return '<p class="eyebrow">Recherche</p>' +
+    '<h1 class="page-title">Résultats pour « '+escapeHtml(q)+' »</h1>' +
+    '<p class="page-sub">'+total+' résultat'+(total>1?'s':'')+'</p>' +
+    body;
 }
 

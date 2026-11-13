@@ -165,7 +165,7 @@ function renderVigilancesDashboard(allVigs){
       '<td><span class="proj-tag"><span class="swatch" style="background:' + v.projectColor + '"></span>' + escapeHtml(v.projectName) + '</span></td>' +
       '<td><span style="display:flex;align-items:flex-start;gap:8px;">' +
         '<span style="width:7px;height:7px;border-radius:50%;background:var(--seal-gold);flex-shrink:0;margin-top:5px;display:inline-block;"></span>' +
-        fmtText(v.text) +
+        '<span class="vigilance-text">' + fmtText(v.text) + '</span>' +
       '</span></td>' +
       '<td class="no-print"><button class="btn btn-ghost" style="font-size:.76rem;padding:4px 10px;" data-action="open-project" data-id="' + v.projectId + '">Ouvrir</button></td>' +
     '</tr>'

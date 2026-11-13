@@ -52,6 +52,41 @@ function getPreparationReminders(){
   return results;
 }
 
+function getUpcomingDeadlines(){
+  // Toutes les tâches ouvertes (échéance) ET les événements du calendrier
+  // (occurrence réelle, pas leur fenêtre de préparation) tombant dans les
+  // 30 prochains jours — complète le panneau "Préparation du mois".
+  const todayIso = todayStr();
+  const start = new Date(); start.setHours(0,0,0,0);
+  const end = new Date(start); end.setDate(end.getDate() + 30);
+  const endIso = end.toISOString().slice(0,10);
+
+  const taskItems = getAllTasks()
+    .filter(t => t.echeance && !DONE_STATUSES.includes(t.statut) && t.echeance >= todayIso && t.echeance <= endIso)
+    .map(t => ({ kind:'task', date:t.echeance, task:t }));
+
+  const eventItems = [];
+  const cal = state.data.calendar;
+  (cal.events||[]).forEach(ev => {
+    const years = ev.recurring ? [...new Set([ev.year, start.getFullYear(), start.getFullYear()+1])] : [ev.year];
+    years.forEach(y => {
+      // Un événement n'a qu'une granularité mensuelle (pas de jour exact) :
+      // on le considère "à venir" si son mois chevauche la fenêtre de 30
+      // jours, et on clampe la date affichée à aujourd'hui s'il s'agit du
+      // mois en cours (sinon le 1er du mois, pour le tri).
+      const monthStart = new Date(y, ev.startMonth, 1);
+      const monthEnd = new Date(y, ev.startMonth + 1, 0);
+      if(monthEnd >= start && monthStart <= end){
+        const displayDate = monthStart < start ? start : monthStart;
+        eventItems.push({ kind:'event', date: displayDate.toISOString().slice(0,10), event: ev,
+          row: cal.rows.find(r=>r.id===ev.rowId) });
+      }
+    });
+  });
+
+  return [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+}
+
 function renderHome(){
   const today = new Date();
   const days = ['dimanche','lundi','mardi','mercredi','jeudi','vendredi','samedi'];
@@ -196,30 +231,71 @@ function renderHome(){
       '</div>' +
   '</div>' +
   '</div>' +
-  /* ---- Preparation detail panel (if any) ---- */
-  (prepReminders.length>0 ?
-    '<div style="background:#FFF8EC;border:1px solid #EECF80;border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;box-shadow:var(--shadow-sm);">' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
-        '<span style="font-size:1rem;">🔔</span>' +
-        '<span style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--seal-gold);font-weight:600;">Préparation projets du mois</span>' +
-      '</div>' +
-      '<div style="display:flex;flex-direction:column;gap:6px;">' +
-        prepReminders.map(r => {
-          const rowLabel = r.row ? r.row.label : 'Activité inconnue';
-          const evMonth = CAL_MONTHS_SHORT[r.event.startMonth];
-          const unitPlural = r.unit==='mois' ? 'mois' : (r.unit + (r.amount>1?'s':''));
-          const before = r.amount + ' ' + unitPlural + ' avant';
-          return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #EED880;">' +
-            '<span style="font-size:.85rem;">📋</span>' +
-            '<div style="flex:1;">' +
-              '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(r.event.text||rowLabel)+'</div>' +
-              '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(rowLabel)+(r.event.responsable?' · '+escapeHtml(r.event.responsable):'')+' · Prévu en '+evMonth+' · Rappel '+before+(r.event.recurring||r.event.reminder.recurring?' · ↻ annuel':'')+'</div>' +
-            '</div>' +
-          '</div>';
-        }).join('') +
-      '</div>' +
-    '</div>'
-  : '');
+  /* ---- Préparation du mois (gauche) + échéances à venir (droite) ---- */
+  (function(){
+    const prepPanel =
+      '<div style="background:'+(prepReminders.length>0?'#FFF8EC':'var(--card)')+';border:1px solid '+(prepReminders.length>0?'#EECF80':'var(--paper-line)')+';border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow-sm);">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+          '<span style="font-size:1rem;">🔔</span>' +
+          '<span style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:'+(prepReminders.length>0?'var(--seal-gold)':'var(--ink-soft)')+';font-weight:600;">Préparation projets du mois</span>' +
+        '</div>' +
+        (prepReminders.length===0
+          ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune préparation prévue ce mois.</p>'
+          : '<div style="display:flex;flex-direction:column;gap:6px;">' +
+              prepReminders.map(r => {
+                const rowLabel = r.row ? r.row.label : 'Activité inconnue';
+                const evMonth = CAL_MONTHS_SHORT[r.event.startMonth];
+                const unitPlural = r.unit==='mois' ? 'mois' : (r.unit + (r.amount>1?'s':''));
+                const before = r.amount + ' ' + unitPlural + ' avant';
+                return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #EED880;">' +
+                  '<span style="font-size:.85rem;">📋</span>' +
+                  '<div style="flex:1;">' +
+                    '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(r.event.text||rowLabel)+'</div>' +
+                    '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(rowLabel)+(r.event.responsable?' · '+escapeHtml(r.event.responsable):'')+' · Prévu en '+evMonth+' · Rappel '+before+(r.event.recurring||r.event.reminder.recurring?' · ↻ annuel':'')+'</div>' +
+                  '</div>' +
+                '</div>';
+              }).join('') +
+            '</div>'
+        ) +
+      '</div>';
+
+    const upcoming = getUpcomingDeadlines();
+    const upcomingPanel =
+      '<div style="background:'+(upcoming.length>0?'#F0F6FC':'var(--card)')+';border:1px solid '+(upcoming.length>0?'#C8DCF0':'var(--paper-line)')+';border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow-sm);">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+          '<span style="font-size:1rem;">📅</span>' +
+          '<span style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:'+(upcoming.length>0?'var(--navy)':'var(--ink-soft)')+';font-weight:600;">Échéances à venir (30 jours)</span>' +
+        '</div>' +
+        (upcoming.length===0
+          ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune échéance dans les 30 prochains jours.</p>'
+          : '<div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
+              upcoming.map(item => {
+                if(item.kind==='task'){
+                  const t = item.task;
+                  return '<div data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                    '<span style="font-size:.85rem;">☑</span>' +
+                    '<div style="flex:1;min-width:0;">' +
+                      '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(t.description)+'</div>' +
+                      '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(t.projectPath)+' · '+fmtDate(item.date)+'</div>' +
+                    '</div>' +
+                  '</div>';
+                }
+                const ev = item.event;
+                const rowLabel = item.row ? item.row.label : '';
+                return '<div data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                  '<span style="font-size:.85rem;">📌</span>' +
+                  '<div style="flex:1;min-width:0;">' +
+                    '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(ev.text||rowLabel)+'</div>' +
+                    '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+(ev.responsable?escapeHtml(ev.responsable)+' · ':'')+fmtDate(item.date)+(ev.recurring?' · ↻ annuel':'')+'</div>' +
+                  '</div>' +
+                '</div>';
+              }).join('') +
+            '</div>'
+        ) +
+      '</div>';
+
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">' + prepPanel + upcomingPanel + '</div>';
+  })();
 
 
 
