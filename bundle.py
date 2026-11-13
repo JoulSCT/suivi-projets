@@ -261,6 +261,11 @@
   .form-row input:focus, .form-row textarea:focus, .form-row select:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(26,74,122,.1);}
   .form-row textarea{resize:vertical;min-height:60px;}
   .form-grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  /* min-width:0 empêche une colonne de grille de s'agrandir au-delà de sa
+     part (1fr) à cause d'un enfant redimensionné (.rte-body) — sans ça,
+     agrandir un champ en largeur pouvait pousser toute la modale hors de
+     l'écran (voir piège correspondant dans ARCHITECTURE.md). */
+  .form-grid2 > .form-row{min-width:0;}
   .dyn-list{display:flex;flex-direction:column;gap:7px;}
   .dyn-row{display:flex;gap:7px;align-items:center;}
   .dyn-row input{flex:1;}
@@ -274,12 +279,18 @@
 
   /* ===== MODAL ===== */
   .modal-overlay{position:fixed;inset:0;background:rgba(10,20,35,.45);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:50;padding:20px;}
-  .modal-card{background:var(--card);border-radius:14px;padding:26px 28px;width:480px;max-width:96vw;max-height:92vh;overflow-y:auto;box-shadow:var(--shadow-lg);}
+  /* .modal-card fixe la forme (coins arrondis, largeur, ombre) mais ne
+     défile JAMAIS lui-même : c'est .modal-card-inner, en retrait grâce à
+     son padding, qui porte le scroll. Sans ça, la barre de défilement
+     native (toujours rectangulaire) vient recouvrir et « carrer »
+     visuellement les coins arrondis du haut et du bas à droite. */
+  .modal-card{background:var(--card);border-radius:14px;width:480px;max-width:96vw;max-height:92vh;overflow:hidden;box-shadow:var(--shadow-lg);}
   .modal-card.wide{width:640px;}
-  .modal-card.xwide{width:820px;}
+  .modal-card.xwide{width:1300px;}
+  .modal-card-inner{padding:26px 28px;max-height:92vh;overflow-y:auto;}
 
   /* Rich text editor */
-  .rte-wrap{border:1px solid var(--paper-line);border-radius:6px;background:#FAFCFF;overflow:hidden;box-shadow:var(--shadow-sm);}
+  .rte-wrap{min-width:0;border:1px solid var(--paper-line);border-radius:6px;background:#FAFCFF;overflow:hidden;box-shadow:var(--shadow-sm);}
   .rte-toolbar{display:flex;gap:3px;padding:6px 8px;background:#F2F5FA;border-bottom:1px solid var(--paper-line);flex-wrap:wrap;align-items:center;}
   .rte-btn{padding:4px 8px;border-radius:4px;border:1px solid transparent;background:none;font-family:var(--font-body);font-size:.82rem;cursor:pointer;color:var(--ink);line-height:1;transition:all .1s;min-width:28px;text-align:center;}
   .rte-btn:hover{background:var(--blush);border-color:var(--paper-line);}
@@ -287,7 +298,7 @@
   .rte-sep{width:1px;height:18px;background:var(--paper-line);margin:0 4px;flex-shrink:0;}
   .rte-color{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;flex-shrink:0;transition:transform .1s;}
   .rte-color:hover{transform:scale(1.2);border-color:var(--ink);}
-  .rte-body{padding:10px 12px;min-height:100px;max-height:600px;overflow-y:auto;outline:none;font-size:.88rem;line-height:1.6;color:var(--ink);resize:vertical;}
+  .rte-body{box-sizing:border-box;padding:10px 12px;min-height:220px;max-height:600px;min-width:200px;max-width:100%;overflow:auto;outline:none;font-size:.88rem;line-height:1.6;color:var(--ink);resize:both;}
   .rte-body:focus{background:#fff;}
   .rte-body div, .rte-body p, .rte-body span{font-size:inherit;line-height:inherit;margin:0;}
   .rte-body ul, .rte-body ol{margin:4px 0 4px 18px;padding:0;}
@@ -301,6 +312,11 @@
   .swatch-option{width:30px;height:30px;border-radius:8px;border:3px solid transparent;cursor:pointer;transition:all .12s;}
   .swatch-option:hover{transform:scale(1.15);box-shadow:0 3px 10px rgba(0,0,0,.3);}
   .swatch-option.selected{border-color:#fff;outline:2px solid var(--navy);outline-offset:1px;}
+
+  /* Échéances à venir — glisser-déposer */
+  .upcoming-item{transition:transform .08s, box-shadow .08s;}
+  .upcoming-item.dragging{opacity:.4;}
+  .upcoming-item.drag-over{border-color:var(--navy)!important;border-style:dashed!important;background:#E8F0FB!important;}
 
   /* ===== BANNER ===== */
   .banner{position:fixed;bottom:16px;right:16px;color:#fff;padding:10px 16px;border-radius:8px;font-size:.82rem;box-shadow:var(--shadow-lg);z-index:80;max-width:340px;backdrop-filter:blur(4px);}
@@ -1058,7 +1074,42 @@ function getUpcomingDeadlines(){
     });
   });
 
-  return [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+  const items = [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
+  items.forEach(it => { it.key = upcomingItemKey(it); });
+
+  // Ordre manuel (glisser-déposer) : state.data.upcomingOrder est la liste
+  // des clés dans l'ordre choisi par l'utilisateur. Les items qui y figurent
+  // gardent cet ordre ; les items absents (nouveaux depuis le dernier
+  // réarrangement) sont ajoutés à la suite, triés par date comme avant.
+  const order = state.data.upcomingOrder || [];
+  if(order.length){
+    const byKey = new Map(items.map(it => [it.key, it]));
+    const ordered = order.map(k => byKey.get(k)).filter(Boolean);
+    const orderedKeys = new Set(ordered.map(it => it.key));
+    const rest = items.filter(it => !orderedKeys.has(it.key));
+    return [...ordered, ...rest];
+  }
+  return items;
+}
+
+function upcomingItemKey(item){
+  return item.kind==='task' ? ('task:'+item.task.taskId) : ('event:'+item.event.id);
+}
+
+// Réordonne manuellement les "Échéances à venir" après un glisser-déposer :
+// reconstruit l'ordre complet depuis l'ordre actuellement affiché à l'écran
+// (lu dans le DOM), avec draggedKey déplacé juste avant/après targetKey.
+function reorderUpcoming(draggedKey, targetKey, after){
+  if(!draggedKey || !targetKey || draggedKey===targetKey) return;
+  const listEl = document.getElementById('upcoming-list');
+  if(!listEl) return;
+  let keys = [...listEl.querySelectorAll('.upcoming-item')].map(el => el.getAttribute('data-upcoming-key'));
+  keys = keys.filter(k => k !== draggedKey);
+  let idx = keys.indexOf(targetKey);
+  if(idx === -1) idx = keys.length - 1;
+  keys.splice(after ? idx+1 : idx, 0, draggedKey);
+  state.data.upcomingOrder = keys;
+  persistAndRender();
 }
 
 function renderHome(){
@@ -1242,11 +1293,13 @@ function renderHome(){
         '</div>' +
         (upcoming.length===0
           ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune échéance dans les 30 prochains jours.</p>'
-          : '<div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
+          : '<div id="upcoming-list" style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
               upcoming.map(item => {
+                const key = item.key || upcomingItemKey(item);
                 if(item.kind==='task'){
                   const t = item.task;
-                  return '<div data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                  return '<div class="upcoming-item" draggable="true" data-upcoming-key="'+key+'" data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:grab;">' +
+                    '<span style="font-size:.75rem;color:var(--ink-soft);cursor:grab;" title="Glisser pour réordonner">⠿</span>' +
                     '<span style="font-size:.85rem;">☑</span>' +
                     '<div style="flex:1;min-width:0;">' +
                       '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(t.description)+'</div>' +
@@ -1256,7 +1309,8 @@ function renderHome(){
                 }
                 const ev = item.event;
                 const rowLabel = item.row ? item.row.label : '';
-                return '<div data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                return '<div class="upcoming-item" draggable="true" data-upcoming-key="'+key+'" data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:grab;">' +
+                  '<span style="font-size:.75rem;color:var(--ink-soft);cursor:grab;" title="Glisser pour réordonner">⠿</span>' +
                   '<span style="font-size:.85rem;">📌</span>' +
                   '<div style="flex:1;min-width:0;">' +
                     '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(ev.text||rowLabel)+'</div>' +
@@ -1585,7 +1639,11 @@ function renderDashboard(){
     (p.vigilances||[]).forEach(v => allVigs.push({ ...v, projectId:p.id, projectName:getProjectPath(p.id), projectColor:p.color }));
   });
 
-  const openTaskCount2 = all.filter(t=>t.statut!=='fait' && t.statut!=='fait (R.A.)').length;
+  // Cohérent avec DONE_STATUSES (comme la carte "Terminées" ci-dessous) :
+  // 'non réalisé' est un statut terminal, donc exclu du compteur "ouvert"
+  // de l'onglet — corrigé le 13/11/2026 (le badge comptait encore les
+  // tâches "non réalisé" comme ouvertes, contrairement au reste de l'app).
+  const openTaskCount2 = all.filter(t=>!DONE_STATUSES.includes(t.statut)).length;
   const raCount = all.filter(t=>t.statut==='fait (R.A.)').length;
   const priorityCount = getPriorityTasks().length;
   const tabsHtml = '<div class="tab-row" style="margin-bottom:22px;">' +
@@ -1656,22 +1714,34 @@ function renderRaDashboard(all){
   if(!state.raYear) state.raYear = years.includes(currentYear) ? currentYear : (years[0]||currentYear);
   const selYear = state.raYear;
 
-  const filtered = raTasks.filter(t=>{
-    if(selYear==='all') return true;
-    const y = (t.completedAt||t.echeance||'').slice(0,4);
-    return y===selYear;
-  });
+  // getRaFilteredTasks() applique déjà le filtre d'année (state.raYear) ET
+  // trie par projet puis sous-projet puis date — même logique que les
+  // exports Excel/Word, pour que la vue à l'écran, le CSV et le Word
+  // racontent toujours la même histoire (voir ARCHITECTURE.md).
+  const filtered = getRaFilteredTasks();
 
-  const byProject = {};
+  // Regroupement par projet + sous-projet, en groupes consécutifs (déjà
+  // triés) — même logique que exportRaWord().
+  const rawGroups = [];
   filtered.forEach(t=>{
-    if(!byProject[t.projectPath]) byProject[t.projectPath] = { color:t.projectColor, tasks:[] };
-    byProject[t.projectPath].tasks.push(t);
+    const last = rawGroups[rawGroups.length-1];
+    if(last && last.projectName===t.projectName && last.subProjectName===t.subProjectName){
+      last.tasks.push(t);
+    } else {
+      rawGroups.push({ projectName:t.projectName, subProjectName:t.subProjectName, color:t.projectColor, tasks:[t] });
+    }
   });
 
   const yearOptions = '<option value="all">Toutes les années</option>' +
     years.map(y=>'<option value="'+y+'"'+(selYear===y?' selected':'')+'>'+y+'</option>').join('');
 
-  const groups = Object.entries(byProject).map(([projName, grp])=>{
+  // Largeurs de colonnes fixes et IDENTIQUES pour tous les groupes, pour
+  // que les tableaux de chaque projet restent alignés entre eux (sinon
+  // chaque <table> ajuste ses colonnes indépendamment selon son contenu).
+  const colgroupHtml = '<colgroup><col style="width:18%;"><col style="width:42%;"><col style="width:20%;"><col style="width:20%;"></colgroup>';
+
+  let lastProjectHeading = null;
+  const groups = rawGroups.map(grp=>{
     const rows = grp.tasks.map(t=>
       '<tr>' +
         '<td>'+escapeHtml(t.originLabel)+'</td>' +
@@ -1680,19 +1750,27 @@ function renderRaDashboard(all){
         '<td style="font-family:var(--font-mono);font-size:.78rem;">'+(t.completedAt?fmtDate(t.completedAt):(t.echeance?fmtDate(t.echeance):'—'))+'</td>' +
       '</tr>'
     ).join('');
-    return '<div style="margin-bottom:28px;">' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-        '<span style="width:10px;height:10px;border-radius:50%;background:'+grp.color+';flex-shrink:0;display:inline-block;"></span>' +
-        '<span style="font-family:var(--font-display);font-weight:600;font-size:1rem;">'+escapeHtml(projName)+'</span>' +
-        '<span style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-soft);">\u00b7 '+grp.tasks.length+' réalisation(s)</span>' +
-      '</div>' +
-      '<table class="ledger"><thead><tr><th>Origine</th><th>Réalisation</th><th>Responsable</th><th>Date réalisation</th></tr></thead>' +
+    const showProjectHeading = grp.projectName !== lastProjectHeading;
+    lastProjectHeading = grp.projectName;
+    const heading = showProjectHeading
+      ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+          '<span style="width:10px;height:10px;border-radius:50%;background:'+grp.color+';flex-shrink:0;display:inline-block;"></span>' +
+          '<span style="font-family:var(--font-display);font-weight:600;font-size:1rem;">'+escapeHtml(grp.projectName)+'</span>' +
+        '</div>'
+      : '';
+    const subLine = grp.subProjectName
+      ? '<div style="font-size:.84rem;color:var(--ink-soft);margin:0 0 8px 18px;">'+escapeHtml(grp.subProjectName)+' \u00b7 '+grp.tasks.length+' réalisation(s)</div>'
+      : '<div style="font-size:.7rem;font-family:var(--font-mono);color:var(--ink-soft);margin:0 0 8px 18px;">\u00b7 '+grp.tasks.length+' réalisation(s)</div>';
+    return '<div style="margin-bottom:'+(showProjectHeading?'8px':'28px')+';">' +
+      heading + subLine +
+      '<table class="ledger" style="table-layout:fixed;">' + colgroupHtml +
+      '<thead><tr><th>Origine</th><th>Réalisation</th><th>Responsable</th><th>Date réalisation</th></tr></thead>' +
       '<tbody>'+rows+'</tbody></table>' +
     '</div>';
   }).join('');
 
   const totalCount = filtered.length;
-  const projCount = Object.keys(byProject).length;
+  const projCount = new Set(rawGroups.map(g=>g.projectName)).size;
   const summaryBadge = '<div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;">' +
     '<span style="font-family:var(--font-mono);font-size:.78rem;color:#6B4C9A;background:#F3F0FF;padding:4px 10px;border-radius:4px;">' + totalCount + ' réalisation(s)</span>' +
     '<span style="font-family:var(--font-mono);font-size:.78rem;color:var(--ink-soft);background:var(--blush);padding:4px 10px;border-radius:4px;">' + projCount + ' projet(s)</span>' +
@@ -1756,7 +1834,13 @@ function renderTasksDashboard(all){
   const total = all.length;
   const aFaire = all.filter(t=>t.statut==='à faire').length;
   const enCours = all.filter(t=>t.statut==='en cours').length;
-  const fait = all.filter(t=>t.statut==='fait').length;
+  // "Terminées" regroupe TOUS les statuts de fin (fait, fait (R.A.), non
+  // réalisé) — pas seulement 'fait' — afin que Total = À faire + En cours +
+  // Terminées soit toujours une identité exacte (les 5 statuts de
+  // STATUS_LIST se répartissent intégralement dans ces 3 cases). "En
+  // retard" reste un sous-ensemble transverse de À faire/En cours (pas une
+  // 4e catégorie disjointe) et ne s'additionne donc pas aux 3 autres.
+  const fait = all.filter(t=>DONE_STATUSES.includes(t.statut)).length;
   const enRetard = all.filter(isOverdue).length;
   const aFaireOk = aFaire - all.filter(t=>t.statut==='à faire' && isOverdue(t)).length;
   const enCoursOk = enCours - all.filter(t=>t.statut==='en cours' && isOverdue(t)).length;
@@ -1785,7 +1869,11 @@ function renderTasksDashboard(all){
 
   let rows = all.filter(t => {
     if(f.projet!=='all' && t.projectId!==f.projet) return false;
-    if(f.statut!=='all' && t.statut!==f.statut) return false;
+    if(f.statut==='__done__'){
+      if(!DONE_STATUSES.includes(t.statut)) return false;
+    } else if(f.statut!=='all' && t.statut!==f.statut){
+      return false;
+    }
     if(f.responsable!=='all' && t.responsable!==f.responsable) return false;
     if(f.origine!=='all' && t.origin!==f.origine) return false;
     if(f.onlyOverdue && !isOverdue(t)) return false;
@@ -1844,7 +1932,12 @@ function renderTasksDashboard(all){
         '</tr>';
       }).join('');
 
-  function cardClass(name){ return (name==='total'&&f.statut==='all'&&!f.onlyOverdue)||(name==='overdue'&&f.onlyOverdue)||(name===f.statut&&!f.onlyOverdue)?' active':''; }
+  function cardClass(name){
+    if(f.onlyOverdue) return name==='overdue' ? ' active' : '';
+    if(name==='total') return f.statut==='all' ? ' active' : '';
+    if(name==='fait') return f.statut==='__done__' ? ' active' : '';
+    return name===f.statut ? ' active' : '';
+  }
 
   const statusBar = total===0 ? '' :
     '<div class="status-bar">' +
@@ -1854,18 +1947,18 @@ function renderTasksDashboard(all){
       (enRetard?'<div class="status-bar-segment" style="width:'+(enRetard/total*100)+'%;background:var(--stamp-red);"></div>':'') +
     '</div>' +
     '<div class="status-legend">' +
-      '<span class="status-legend-item" data-action="dash-filter-statut" data-value="fait"><span class="dot" style="background:'+STATUS_COLOR['fait']+'"></span>Terminées · '+fait+'</span>' +
+      '<span class="status-legend-item" data-action="dash-filter-statut" data-value="__done__"><span class="dot" style="background:'+STATUS_COLOR['fait']+'"></span>Terminées · '+fait+'</span>' +
       '<span class="status-legend-item" data-action="dash-filter-statut" data-value="en cours"><span class="dot" style="background:'+STATUS_COLOR['en cours']+'"></span>En cours · '+enCours+'</span>' +
       '<span class="status-legend-item" data-action="dash-filter-statut" data-value="à faire"><span class="dot" style="background:'+STATUS_COLOR['à faire']+'"></span>À faire · '+aFaire+'</span>' +
-      (enRetard?'<span class="status-legend-item" data-action="dash-filter-overdue"><span class="dot" style="background:var(--stamp-red)"></span>En retard · '+enRetard+'</span>':'') +
+      (enRetard?'<span class="status-legend-item" data-action="dash-filter-overdue" title="Sous-ensemble de À faire / En cours — déjà inclus dedans"><span class="dot" style="background:var(--stamp-red)"></span>En retard · '+enRetard+'</span>':'') +
     '</div>';
 
   return '<div class="stat-row">' +
-      '<div class="stat-card'+cardClass('total')+'" data-action="dash-filter-reset"><div class="stat-num">'+total+'</div><div class="stat-label">Total</div></div>' +
+      '<div class="stat-card'+cardClass('total')+'" data-action="dash-filter-reset" title="À faire + En cours + Terminées"><div class="stat-num">'+total+'</div><div class="stat-label">Total</div></div>' +
       '<div class="stat-card'+cardClass('à faire')+'" data-action="dash-filter-statut" data-value="à faire"><div class="stat-num">'+aFaire+'</div><div class="stat-label">À faire</div></div>' +
       '<div class="stat-card'+cardClass('en cours')+'" data-action="dash-filter-statut" data-value="en cours"><div class="stat-num">'+enCours+'</div><div class="stat-label">En cours</div></div>' +
-      '<div class="stat-card'+cardClass('fait')+'" data-action="dash-filter-statut" data-value="fait"><div class="stat-num">'+fait+'</div><div class="stat-label">Terminées</div></div>' +
-      '<div class="stat-card overdue'+cardClass('overdue')+'" data-action="dash-filter-overdue"><div class="stat-num">'+enRetard+'</div><div class="stat-label">En retard</div></div>' +
+      '<div class="stat-card'+cardClass('fait')+'" data-action="dash-filter-statut" data-value="__done__" title="Fait + Fait (R.A.) + Non réalisé"><div class="stat-num">'+fait+'</div><div class="stat-label">Terminées</div></div>' +
+      '<div class="stat-card overdue'+cardClass('overdue')+'" data-action="dash-filter-overdue" title="Sous-ensemble de À faire / En cours — ne s\'ajoute pas au total"><div class="stat-num">'+enRetard+'</div><div class="stat-label">En retard</div></div>' +
     '</div>' +
     statusBar +
     '<div class="filter-row">' +
@@ -2469,7 +2562,9 @@ function renderModal(){
   else if(state.modal.type==='project'){ inner = renderProjectModalInner(); wide = ' xwide'; }
   else { inner = '<p style="color:var(--ink-soft);">Type de modale inconnu : '+escapeHtml(String(state.modal.type))+'</p><div class="form-actions"><button class="btn btn-ghost" data-action="close-modal">Fermer</button></div>'; }
   return '<div class="modal-overlay" data-action="close-modal">' +
-    '<div class="modal-card' + wide + '" data-action="noop">' + inner + '</div>' +
+    '<div class="modal-card' + wide + '" data-action="noop">' +
+      '<div class="modal-card-inner">' + inner + '</div>' +
+    '</div>' +
   '</div>';
 }
 
@@ -2519,6 +2614,22 @@ function renderEditTaskModalInner(){
       '<select id="et-statut">' +
         STATUS_LIST.map(s=>'<option value="'+s+'"'+(t.statut===s?' selected':'')+'>'+s+'</option>').join('') +
       '</select>' +
+    '</div>' +
+    '<div class="form-row" style="background:#FFFBF0;border:1px solid #E8D870;border-radius:8px;padding:10px 14px;">' +
+      '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;font-family:var(--font-body);margin-bottom:'+(t.priority?'8px':'0')+';">' +
+        '<input type="checkbox" id="et-priority" style="width:14px;height:14px;accent-color:#7A5800;"'+(t.priority?' checked':'')+' onchange="document.getElementById(\'et-prio-date-wrap\').style.display=this.checked?\'flex\':\'none\'">' +
+        '⭐ Marquer comme prioritaire' +
+      '</label>' +
+      '<div id="et-prio-date-wrap" style="display:'+(t.priority?'flex':'none')+';align-items:center;gap:8px;flex-wrap:wrap;">' +
+        '<span style="font-size:.82rem;color:var(--ink-soft);">Afficher à partir du :</span>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;font-family:var(--font-body);text-transform:none;letter-spacing:0;color:var(--ink-soft);">' +
+          '<input type="radio" name="et-prio-when" value="now"'+(t.priorityFrom?'':' checked')+' style="accent-color:#7A5800;"> Maintenant' +
+        '</label>' +
+        '<label style="display:flex;align-items:center;gap:5px;font-size:.8rem;cursor:pointer;font-family:var(--font-body);text-transform:none;letter-spacing:0;color:var(--ink-soft);">' +
+          '<input type="radio" name="et-prio-when" value="later"'+(t.priorityFrom?' checked':'')+' style="accent-color:#7A5800;"> Date :' +
+          '<input type="date" id="et-prio-date" value="'+escapeHtml(t.priorityFrom||'')+'" style="padding:4px 7px;border:1px solid var(--paper-line);border-radius:5px;font-family:inherit;font-size:.8rem;margin-left:4px;">' +
+        '</label>' +
+      '</div>' +
     '</div>' +
     '<div class="form-row" style="background:var(--blush);border-radius:8px;padding:10px 14px;">' +
       '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.84rem;font-family:var(--font-body);margin-bottom:6px;">' +
@@ -4541,6 +4652,20 @@ document.getElementById('app').addEventListener('click', function(e){
       m.task.echeance = noDate ? '' : document.getElementById('et-date').value;
       setTaskStatut(m.task, document.getElementById('et-statut').value);
 
+      // Priorité (⭐) : même logique que l'ajout direct de tâche / les points
+      // de vigilance EPV — cocher rend prioritaire immédiatement ou à partir
+      // d'une date choisie ; décocher retire la priorité.
+      const etPrioCheckbox = document.getElementById('et-priority');
+      if(etPrioCheckbox && etPrioCheckbox.checked){
+        const etPrioWhen = document.querySelector('input[name="et-prio-when"]:checked');
+        const etPrioDate = document.getElementById('et-prio-date');
+        m.task.priority = true;
+        m.task.priorityFrom = (etPrioWhen && etPrioWhen.value==='later' && etPrioDate && etPrioDate.value) ? etPrioDate.value : null;
+      } else if(etPrioCheckbox){
+        m.task.priority = false;
+        m.task.priorityFrom = null;
+      }
+
       // Handle move to another project
       const moveToggle = document.getElementById('et-move-toggle');
       const moveTarget = document.getElementById('et-move-target');
@@ -4930,6 +5055,50 @@ document.getElementById('app').addEventListener('keydown', function(e){
       persistAndRender();
     }
   }
+});
+
+/* ============== DRAG & DROP — Échéances à venir ============== */
+// Réordonnement manuel des tâches/événements du panneau "Échéances à venir"
+// (accueil). HTML5 drag-and-drop natif ; la coexistence avec le clic normal
+// (data-action="open-edit-task" / "edit-cal-event") fonctionne nativement :
+// un vrai clic (sans déplacement de souris) ne déclenche jamais dragstart.
+document.getElementById('app').addEventListener('dragstart', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.dataTransfer.setData('text/plain', item.getAttribute('data-upcoming-key'));
+  e.dataTransfer.effectAllowed = 'move';
+  item.classList.add('dragging');
+});
+
+document.getElementById('app').addEventListener('dragover', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.preventDefault();
+  item.classList.add('drag-over');
+});
+
+document.getElementById('app').addEventListener('dragleave', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(item) item.classList.remove('drag-over');
+});
+
+document.getElementById('app').addEventListener('drop', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(!item) return;
+  e.preventDefault();
+  item.classList.remove('drag-over');
+  const draggedKey = e.dataTransfer.getData('text/plain');
+  const targetKey = item.getAttribute('data-upcoming-key');
+  // Dépose dans la moitié basse de l'élément cible -> juste après lui.
+  const rect = item.getBoundingClientRect();
+  const after = (e.clientY - rect.top) > rect.height/2;
+  reorderUpcoming(draggedKey, targetKey, after);
+});
+
+document.getElementById('app').addEventListener('dragend', function(e){
+  const item = e.target.closest ? e.target.closest('.upcoming-item') : null;
+  if(item) item.classList.remove('dragging');
+  document.querySelectorAll('.upcoming-item.drag-over').forEach(el=>el.classList.remove('drag-over'));
 });
 
 /* ============== INIT ============== */
