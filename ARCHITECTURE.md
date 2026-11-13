@@ -1,3 +1,4 @@
+[ARCHITECTURE.md](https://github.com/user-attachments/files/34794833/ARCHITECTURE.md)
 # ARCHITECTURE — Suivi de Projets (HUG)
 
 ## 1. Vue d'ensemble
@@ -77,7 +78,7 @@ Racine (`state.data`, persistée dans `localStorage['tracker-data']`) :
   seances: { [projectId]: [ Seance, ... ] },
   pages:   { [projectId]: [ Page, ... ] },
   quickNotes: [ { id, text, done, createdAt }, ... ],
-  calendar: { rows: [...], events: [...] },
+  calendar: { rows: [...], events: [...], cellNotes: [...] },
   evolvingPV: { [projectId]: { entries: [ EpvEntry, ... ] } }
 }
 ```
@@ -323,6 +324,21 @@ texte brut : `seance.notes`, `seance.conclusions[]`, `page.notes`,
    fonctions est modifiée, vérifier l'autre par script de fumée (voir
    l'historique de session pour un exemple de script couvrant les 2 cas ×
    2 années).
+10. **`exportRaWord()` générait des `<td>` sans `>` de fermeture** (concaténation
+    de chaînes incomplète : `style="..."` jamais suivi du `c` qui ferme la
+    balise). Corrigé le 13/11/2026 — cause probable du désalignement visuel
+    des colonnes signalé par Jul. Toute nouvelle balise ajoutée dans ce
+    générateur de HTML "à la main" (motif `o+'tag ...'+c+...+o+'/tag'+c`,
+    `o`='<', `c`='>') doit être relue caractère par caractère : un `+c+`
+    manquant ne lève aucune erreur JS, il corrompt juste le rendu final.
+11. **`getUpcomingDeadlines()` (`03-home.js`) n'a qu'une granularité
+    mensuelle pour les événements du calendrier** (pas de jour exact dans
+    `CalendarEvent`). Un événement est inclus dès que son mois chevauche la
+    fenêtre de 30 jours, et sa date affichée est "clampée" à aujourd'hui si
+    le mois est déjà en cours — ne pas réintroduire une comparaison stricte
+    sur le 1er du mois, qui exclurait à tort les événements du mois en
+    cours déjà "passés" en jour (bug repéré et corrigé en écrivant le
+    script de fumée de cette session).
 
 ---
 
@@ -348,6 +364,10 @@ texte brut : `seance.notes`, `seance.conclusions[]`, `page.notes`,
 | Planification des priorités, import d'un PV externe (JSON) | `js/13-priority-pv-import.js` |
 | **Comportement d'un clic/changement/collage/touche** (`data-action="..."`) | `js/14-event-delegation.js` |
 | Séquence de démarrage de l'app | `js/15-init.js` |
+| Recherche globale (barre de recherche, `searchAll`, `renderSearchResults`) | `js/02-render-root.js` (rendu + logique), `js/14-event-delegation.js` (saisie/Échap/clic), `src/styles.css` (`.sidebar-search`) |
+| Export RA (classification projet/sous-projet, colonnes alignées) | `js/10-actions-projects-export.js` (`getRaFilteredTasks`, `exportRaExcel`, `exportRaWord`) |
+| Sauvegarde JSON automatique périodique | `js/12-reminder-epv.js` (`checkAutoExport`), `js/10-actions-projects-export.js` (`exportJson`), `js/15-init.js` |
+| Panneau « Échéances à venir » (accueil) | `js/03-home.js` (`getUpcomingDeadlines`, `renderHome`) |
 | Assemblage final en un seul fichier | `bundle.py` |
 
 ---
