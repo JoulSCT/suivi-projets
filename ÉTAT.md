@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34799610/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34804112/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -119,12 +119,6 @@ l'écran).
     déborder ni de sa colonne ni de la modale, quelle que soit la façon dont
     on le redimensionne.
 11. ✅ **4e retour de Jul, même jour — 2 derniers ajustements** :
-    - Les coins restaient visuellement carrés malgré `border-radius:14px` :
-      cause probable, le `overflow-x:hidden` ajouté sur `.modal-card` dans la
-      tentative précédente (devenu inutile maintenant que la vraie cause du
-      débordement — le `min-width:auto` de la grille — est corrigée au point
-      10 ci-dessus). Retiré ; seul `overflow-y:auto` (déjà présent avant
-      cette série de corrections) est conservé.
     - Jul souhaitait une modale « Modifier le projet » nettement plus
       spacieuse pour y saisir librement beaucoup de contenu, sans dépendre du
       redimensionnement manuel des champs. Le blocage de grille étant corrigé
@@ -132,7 +126,22 @@ l'écran).
       un nouveau débordement : `.modal-card.xwide` passe de 820px à **1100px**
       (toujours plafonné à `max-width:96vw`, donc sans dépassement d'écran),
       et la hauteur initiale des champs de texte riche passe de 140px à
-      **220px**.
+      **220px**. Puis, sur demande explicite de Jul d'aller encore plus
+      large, repassée à **1300px** (toujours plafonnée à `max-width:96vw`).
+    - Les coins restaient visuellement carrés en haut et bas à droite,
+      précisément là où passe la barre de défilement verticale. Cause réelle
+      (confirmée après plusieurs essais infructueux avec `overflow-x`) :
+      `.modal-card` portait elle-même le défilement (`overflow-y:auto`
+      directement dessus, collé au bord arrondi) — la barre de défilement
+      native, toujours rectangulaire, venait recouvrir et « carrer »
+      visuellement les 2 coins droits.
+12. ✅ **Vraie correction des coins carrés** (`08-modals.js`, `styles.css`) :
+    ajout d'un conteneur interne `.modal-card-inner` qui porte désormais seul
+    le padding et le défilement (`overflow-y:auto`), en retrait des bords
+    grâce à son padding — pendant que `.modal-card` (coins arrondis) se
+    contente de `overflow:hidden` sans jamais défiler lui-même. La barre de
+    défilement ne touche donc plus jamais la courbe des coins, quelle que
+    soit la hauteur du contenu.
 
 Contrôle anti-régression : `node --check` sur les fichiers touchés et sur
 le bundle final. Script de fumée (16 assertions) toujours au vert après ces
