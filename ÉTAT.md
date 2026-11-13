@@ -1,4 +1,4 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34806533/ETAT.md)
+[ÉTAT.md](https://github.com/user-attachments/files/34806857/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -188,6 +188,15 @@ pour le modèle de données complet.
     seul ce dernier était restauré après un re-rendu complet de l'app
     (déclenché à chaque dépose). Corrigé en sauvegardant/restaurant aussi la
     position de défilement de `#upcoming-list` dans `render()`.
+16. ✅ **Le glisser-déposer donnait l'impression que toute l'application
+    « cliquait » / se rechargeait** (`03-home.js`, `reorderUpcoming()`).
+    Cause : chaque dépose appelait `persistAndRender()`, qui redessine
+    entièrement l'application (sidebar comprise) juste pour réordonner 2
+    lignes d'une petite liste — visuellement très abrupt pour une simple
+    interaction de glisser-déposer. Corrigé : le nœud DOM concerné est
+    maintenant déplacé directement (`targetEl.after/before(draggedEl)`),
+    sans redessiner le reste de la page ; l'ordre est ensuite sauvegardé en
+    silence (`saveData()` seul, sans `render()`).
 
 ## Prochaine étape
 
