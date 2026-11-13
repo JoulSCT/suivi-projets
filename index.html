@@ -48,6 +48,12 @@
   .sidebar-header{padding:20px 18px 14px;border-bottom:1px solid rgba(255,255,255,.08);}
   .brand-mark{font-family:var(--font-display);font-size:1.1rem;font-weight:600;margin:0;color:#fff;letter-spacing:.01em;}
   .brand-sub{font-family:var(--font-mono);font-size:.6rem;letter-spacing:.14em;text-transform:uppercase;color:#6A8098;margin-top:3px;}
+  .sidebar-search{margin:4px 10px 8px;position:relative;}
+  .sidebar-search input{width:100%;padding:8px 30px 8px 11px;border-radius:7px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;font-size:.82rem;font-family:inherit;box-sizing:border-box;}
+  .sidebar-search input::placeholder{color:#7A8FA6;}
+  .sidebar-search input:focus{outline:none;border-color:rgba(255,255,255,.3);background:rgba(255,255,255,.1);}
+  .sidebar-search .clear-search-btn{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:none;color:#7A8FA6;cursor:pointer;font-size:.8rem;padding:2px 4px;}
+  .sidebar-search .clear-search-btn:hover{color:#fff;}
   .nav-dashboard{margin:10px 10px 4px;}
   .nav-item{display:flex;align-items:center;gap:9px;padding:9px 11px;border-radius:7px;color:#A8BACA;text-decoration:none;background:none;border:none;width:100%;text-align:left;font-size:.84rem;font-weight:400;transition:background .12s;}
   .nav-item svg{width:15px;height:15px;flex-shrink:0;opacity:.7;}
@@ -281,7 +287,7 @@
   .rte-sep{width:1px;height:18px;background:var(--paper-line);margin:0 4px;flex-shrink:0;}
   .rte-color{width:20px;height:20px;border-radius:50%;border:2px solid transparent;cursor:pointer;flex-shrink:0;transition:transform .1s;}
   .rte-color:hover{transform:scale(1.2);border-color:var(--ink);}
-  .rte-body{padding:10px 12px;min-height:100px;max-height:220px;overflow-y:auto;outline:none;font-size:.88rem;line-height:1.6;color:var(--ink);}
+  .rte-body{padding:10px 12px;min-height:100px;max-height:600px;overflow-y:auto;outline:none;font-size:.88rem;line-height:1.6;color:var(--ink);resize:vertical;}
   .rte-body:focus{background:#fff;}
   .rte-body div, .rte-body p, .rte-body span{font-size:inherit;line-height:inherit;margin:0;}
   .rte-body ul, .rte-body ol{margin:4px 0 4px 18px;padding:0;}
@@ -499,6 +505,7 @@ let state = {
   dragProjectId: null,
   homeNoteInput: '',
   editingQuickNoteId: null,
+  searchQuery: '',
   calYear: new Date().getFullYear(),          // 'seances' | 'pages'
   draftSeance: null,
   draftPage: null,
@@ -814,6 +821,10 @@ function renderSidebar(){
       '<p class="brand-mark">Suivi de Projets</p>' +
       '<p class="brand-sub">Procès-verbaux &amp; tâches</p>' +
     '</div>' +
+    '<div class="sidebar-search">' +
+      '<input type="text" id="global-search-input" placeholder="Rechercher…" autocomplete="off" value="'+escapeHtml(state.searchQuery||'')+'">' +
+      (state.searchQuery ? '<button class="clear-search-btn" data-action="clear-search" title="Effacer la recherche">✕</button>' : '') +
+    '</div>' +
     '<div class="nav-dashboard">' +
       '<button class="nav-item' + (state.view==='home'?' active':'') + '" data-action="open-home">' + ICONS.dashboard + '<span>Accueil</span></button>' +
       '<button class="nav-item' + (['dashboard','calendar'].includes(state.view)?' active':'') + '" data-action="open-dashboard">' +
@@ -836,6 +847,7 @@ function renderSidebar(){
 }
 
 function renderMain(){
+  if(state.searchQuery && state.searchQuery.trim()) return renderSearchResults();
   switch(state.view){
     case 'loading': return '<p class="page-sub">Chargement…</p>';
     case 'home': return renderHome();
@@ -870,6 +882,96 @@ function getPriorityTasksScheduled(){
   return getAllTasks().filter(t =>
     t.priority && !DONE_STATUSES.includes(t.statut) && t.priorityFrom && t.priorityFrom > today
   );
+}
+
+/* ============== RECHERCHE GLOBALE ============== */
+function searchAll(query){
+  const q = (query||'').trim().toLowerCase();
+  const results = { projects:[], tasks:[], seances:[], pages:[], vigilances:[], events:[], notes:[], epv:[] };
+  if(!q) return results;
+
+  state.data.projects.forEach(p => {
+    const hayP = [p.name||'', stripHtml(p.description||''), stripHtml(p.contacts||'')].join(' ').toLowerCase();
+    if(hayP.includes(q)) results.projects.push(p);
+    (p.vigilances||[]).forEach(v => { if(stripHtml(v.text||'').toLowerCase().includes(q)) results.vigilances.push({ project:p, text:v.text, isDev:false }); });
+    (p.developments||[]).forEach(d => { if(stripHtml(d.text||'').toLowerCase().includes(q)) results.vigilances.push({ project:p, text:d.text, isDev:true }); });
+
+    getSeances(p.id).forEach(s => {
+      const hayS = [s.title||'', stripHtml(s.notes||''), (s.conclusions||[]).map(stripHtml).join(' ')].join(' ').toLowerCase();
+      if(hayS.includes(q)) results.seances.push({ project:p, seance:s });
+    });
+    getPages(p.id).forEach(pg => {
+      const hayPg = [pg.title||'', stripHtml(pg.notes||'')].join(' ').toLowerCase();
+      if(hayPg.includes(q)) results.pages.push({ project:p, page:pg });
+    });
+    getEPV(p.id).forEach(entry => {
+      const hayE = [stripHtml(entry.notes||''), (entry.conclusions||[]).map(stripHtml).join(' ')].join(' ').toLowerCase();
+      if(hayE.includes(q)) results.epv.push({ project:p, entry });
+    });
+  });
+
+  getAllTasks().forEach(t => {
+    const hayT = [(t.description||''), (t.responsable||'')].join(' ').toLowerCase();
+    if(hayT.includes(q)) results.tasks.push(t);
+  });
+
+  (state.data.calendar && state.data.calendar.events || []).forEach(ev => {
+    const hayEv = [(ev.text||''), (ev.responsable||'')].join(' ').toLowerCase();
+    if(hayEv.includes(q)) results.events.push(ev);
+  });
+
+  (state.data.quickNotes||[]).forEach(n => {
+    if((n.text||'').toLowerCase().includes(q)) results.notes.push(n);
+  });
+
+  return results;
+}
+
+function renderSearchResults(){
+  const q = (state.searchQuery||'').trim();
+  const r = searchAll(q);
+  const total = r.projects.length + r.tasks.length + r.seances.length + r.pages.length + r.vigilances.length + r.events.length + r.notes.length + r.epv.length;
+
+  function card(action, attrs, icon, title, sub){
+    return '<div data-action="'+action+'" '+attrs+' style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--paper-line);border-radius:8px;cursor:pointer;">' +
+      '<span style="font-size:.9rem;flex-shrink:0;">'+icon+'</span>' +
+      '<div style="flex:1;min-width:0;">' +
+        '<div style="font-weight:600;font-size:.86rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+title+'</div>' +
+        (sub ? '<div style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+sub+'</div>' : '') +
+      '</div>' +
+    '</div>';
+  }
+  function section(title, items, fn){
+    if(!items.length) return '';
+    return '<div style="margin-bottom:22px;">' +
+      '<p class="home-section-title">'+escapeHtml(title)+' <span style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">('+items.length+')</span></p>' +
+      '<div style="display:flex;flex-direction:column;gap:6px;">' + items.map(fn).join('') + '</div>' +
+    '</div>';
+  }
+
+  const body = total===0
+    ? '<p style="color:var(--ink-soft);font-size:.9rem;">Aucun résultat pour « '+escapeHtml(q)+' ».</p>'
+    : section('Projets', r.projects, p =>
+        card('open-project', 'data-id="'+p.id+'"', '📁', escapeHtml(p.name), escapeHtml(p.status||''))) +
+      section('Tâches', r.tasks, t =>
+        card('open-edit-task', 'data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'"', '☑', escapeHtml(t.description), escapeHtml(t.projectPath)+(t.echeance?' · '+fmtDate(t.echeance):''))) +
+      section('Vigilances &amp; perspectives', r.vigilances, v =>
+        card('open-project', 'data-id="'+v.project.id+'"', v.isDev?'➡':'⚠', escapeHtml(stripHtml(v.text).slice(0,120)), escapeHtml(v.project.name))) +
+      section('Séances (PV)', r.seances, x =>
+        card('open-seance', 'data-pid="'+x.project.id+'" data-id="'+x.seance.id+'"', '🗒', escapeHtml(x.seance.title||'Séance'), escapeHtml(x.project.name)+' · '+fmtDate(x.seance.date))) +
+      section('Pages', r.pages, x =>
+        card('open-page', 'data-pid="'+x.project.id+'" data-id="'+x.page.id+'"', '📄', escapeHtml(x.page.title), escapeHtml(x.project.name))) +
+      section('Suivi continu', r.epv, x =>
+        card('open-project', 'data-id="'+x.project.id+'"', '↻', escapeHtml(stripHtml(x.entry.notes||'').slice(0,120)||'(entrée sans notes)'), escapeHtml(x.project.name)+' · '+fmtDate(x.entry.date))) +
+      section('Événements du calendrier', r.events, ev =>
+        card('edit-cal-event', 'data-id="'+ev.id+'"', '📅', escapeHtml(ev.text||''), (ev.responsable?escapeHtml(ev.responsable)+' · ':'')+CAL_MONTHS_SHORT[ev.startMonth]+' '+ev.year)) +
+      section('Notes rapides', r.notes, n =>
+        card('open-home', '', '📝', escapeHtml(n.text), fmtDate(n.createdAt)));
+
+  return '<p class="eyebrow">Recherche</p>' +
+    '<h1 class="page-title">Résultats pour « '+escapeHtml(q)+' »</h1>' +
+    '<p class="page-sub">'+total+' résultat'+(total>1?'s':'')+'</p>' +
+    body;
 }
 
 /* ============== HOME VIEW ============== */
@@ -922,6 +1024,41 @@ function getPreparationReminders(){
     }
   });
   return results;
+}
+
+function getUpcomingDeadlines(){
+  // Toutes les tâches ouvertes (échéance) ET les événements du calendrier
+  // (occurrence réelle, pas leur fenêtre de préparation) tombant dans les
+  // 30 prochains jours — complète le panneau "Préparation du mois".
+  const todayIso = todayStr();
+  const start = new Date(); start.setHours(0,0,0,0);
+  const end = new Date(start); end.setDate(end.getDate() + 30);
+  const endIso = end.toISOString().slice(0,10);
+
+  const taskItems = getAllTasks()
+    .filter(t => t.echeance && !DONE_STATUSES.includes(t.statut) && t.echeance >= todayIso && t.echeance <= endIso)
+    .map(t => ({ kind:'task', date:t.echeance, task:t }));
+
+  const eventItems = [];
+  const cal = state.data.calendar;
+  (cal.events||[]).forEach(ev => {
+    const years = ev.recurring ? [...new Set([ev.year, start.getFullYear(), start.getFullYear()+1])] : [ev.year];
+    years.forEach(y => {
+      // Un événement n'a qu'une granularité mensuelle (pas de jour exact) :
+      // on le considère "à venir" si son mois chevauche la fenêtre de 30
+      // jours, et on clampe la date affichée à aujourd'hui s'il s'agit du
+      // mois en cours (sinon le 1er du mois, pour le tri).
+      const monthStart = new Date(y, ev.startMonth, 1);
+      const monthEnd = new Date(y, ev.startMonth + 1, 0);
+      if(monthEnd >= start && monthStart <= end){
+        const displayDate = monthStart < start ? start : monthStart;
+        eventItems.push({ kind:'event', date: displayDate.toISOString().slice(0,10), event: ev,
+          row: cal.rows.find(r=>r.id===ev.rowId) });
+      }
+    });
+  });
+
+  return [...taskItems, ...eventItems].sort((a,b) => a.date.localeCompare(b.date));
 }
 
 function renderHome(){
@@ -1068,30 +1205,71 @@ function renderHome(){
       '</div>' +
   '</div>' +
   '</div>' +
-  /* ---- Preparation detail panel (if any) ---- */
-  (prepReminders.length>0 ?
-    '<div style="background:#FFF8EC;border:1px solid #EECF80;border-radius:var(--radius);padding:14px 18px;margin-bottom:20px;box-shadow:var(--shadow-sm);">' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
-        '<span style="font-size:1rem;">🔔</span>' +
-        '<span style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:var(--seal-gold);font-weight:600;">Préparation projets du mois</span>' +
-      '</div>' +
-      '<div style="display:flex;flex-direction:column;gap:6px;">' +
-        prepReminders.map(r => {
-          const rowLabel = r.row ? r.row.label : 'Activité inconnue';
-          const evMonth = CAL_MONTHS_SHORT[r.event.startMonth];
-          const unitPlural = r.unit==='mois' ? 'mois' : (r.unit + (r.amount>1?'s':''));
-          const before = r.amount + ' ' + unitPlural + ' avant';
-          return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #EED880;">' +
-            '<span style="font-size:.85rem;">📋</span>' +
-            '<div style="flex:1;">' +
-              '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(r.event.text||rowLabel)+'</div>' +
-              '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(rowLabel)+(r.event.responsable?' · '+escapeHtml(r.event.responsable):'')+' · Prévu en '+evMonth+' · Rappel '+before+(r.event.recurring||r.event.reminder.recurring?' · ↻ annuel':'')+'</div>' +
-            '</div>' +
-          '</div>';
-        }).join('') +
-      '</div>' +
-    '</div>'
-  : '');
+  /* ---- Préparation du mois (gauche) + échéances à venir (droite) ---- */
+  (function(){
+    const prepPanel =
+      '<div style="background:'+(prepReminders.length>0?'#FFF8EC':'var(--card)')+';border:1px solid '+(prepReminders.length>0?'#EECF80':'var(--paper-line)')+';border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow-sm);">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+          '<span style="font-size:1rem;">🔔</span>' +
+          '<span style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:'+(prepReminders.length>0?'var(--seal-gold)':'var(--ink-soft)')+';font-weight:600;">Préparation projets du mois</span>' +
+        '</div>' +
+        (prepReminders.length===0
+          ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune préparation prévue ce mois.</p>'
+          : '<div style="display:flex;flex-direction:column;gap:6px;">' +
+              prepReminders.map(r => {
+                const rowLabel = r.row ? r.row.label : 'Activité inconnue';
+                const evMonth = CAL_MONTHS_SHORT[r.event.startMonth];
+                const unitPlural = r.unit==='mois' ? 'mois' : (r.unit + (r.amount>1?'s':''));
+                const before = r.amount + ' ' + unitPlural + ' avant';
+                return '<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #EED880;">' +
+                  '<span style="font-size:.85rem;">📋</span>' +
+                  '<div style="flex:1;">' +
+                    '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(r.event.text||rowLabel)+'</div>' +
+                    '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(rowLabel)+(r.event.responsable?' · '+escapeHtml(r.event.responsable):'')+' · Prévu en '+evMonth+' · Rappel '+before+(r.event.recurring||r.event.reminder.recurring?' · ↻ annuel':'')+'</div>' +
+                  '</div>' +
+                '</div>';
+              }).join('') +
+            '</div>'
+        ) +
+      '</div>';
+
+    const upcoming = getUpcomingDeadlines();
+    const upcomingPanel =
+      '<div style="background:'+(upcoming.length>0?'#F0F6FC':'var(--card)')+';border:1px solid '+(upcoming.length>0?'#C8DCF0':'var(--paper-line)')+';border-radius:var(--radius);padding:14px 18px;box-shadow:var(--shadow-sm);">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">' +
+          '<span style="font-size:1rem;">📅</span>' +
+          '<span style="font-family:var(--font-mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;color:'+(upcoming.length>0?'var(--navy)':'var(--ink-soft)')+';font-weight:600;">Échéances à venir (30 jours)</span>' +
+        '</div>' +
+        (upcoming.length===0
+          ? '<p style="font-size:.82rem;color:var(--ink-soft);margin:0;">Aucune échéance dans les 30 prochains jours.</p>'
+          : '<div style="display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;">' +
+              upcoming.map(item => {
+                if(item.kind==='task'){
+                  const t = item.task;
+                  return '<div data-action="open-edit-task" data-task-id="'+t.taskId+'" data-project-id="'+t.projectId+'" data-origin="'+t.origin+'" data-seance-id="'+(t.seanceId||'')+'" data-page-id="'+(t.pageId||'')+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                    '<span style="font-size:.85rem;">☑</span>' +
+                    '<div style="flex:1;min-width:0;">' +
+                      '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(t.description)+'</div>' +
+                      '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+escapeHtml(t.projectPath)+' · '+fmtDate(item.date)+'</div>' +
+                    '</div>' +
+                  '</div>';
+                }
+                const ev = item.event;
+                const rowLabel = item.row ? item.row.label : '';
+                return '<div data-action="edit-cal-event" data-id="'+ev.id+'" style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:rgba(255,255,255,.7);border-radius:7px;border:1px solid #D7E3F0;cursor:pointer;">' +
+                  '<span style="font-size:.85rem;">📌</span>' +
+                  '<div style="flex:1;min-width:0;">' +
+                    '<div style="font-weight:600;font-size:.86rem;color:var(--ink);">'+escapeHtml(ev.text||rowLabel)+'</div>' +
+                    '<div style="font-family:var(--font-mono);font-size:.68rem;color:var(--ink-soft);">'+(ev.responsable?escapeHtml(ev.responsable)+' · ':'')+fmtDate(item.date)+(ev.recurring?' · ↻ annuel':'')+'</div>' +
+                  '</div>' +
+                '</div>';
+              }).join('') +
+            '</div>'
+        ) +
+      '</div>';
+
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">' + prepPanel + upcomingPanel + '</div>';
+  })();
 
 
 
@@ -2814,21 +2992,43 @@ function deleteProject(id){
   render();
 }
 
-function exportJson(){
+function exportJson(isAuto){
   const blob = new Blob([JSON.stringify(state.data, null, 2)], {type:'application/json'});
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
-  a.href = url; a.download = 'suivi-projets-export.json';
+  a.href = url; a.download = isAuto ? 'suivi-projets-sauvegarde-auto-'+todayStr()+'.json' : 'suivi-projets-export.json';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
   stampExportTime();
-  showBanner('Export téléchargé. Prochaine sauvegarde recommandée dans 7 jours.', 'success');
+  if(isAuto){
+    showBanner('Sauvegarde automatique effectuée (fichier JSON téléchargé).', 'info');
+  } else {
+    showBanner('Export téléchargé. Prochaine sauvegarde recommandée dans 7 jours.', 'success');
+  }
 }
 
 function getRaFilteredTasks(){
   const all = getAllTasks();
+  // Classification ordonnée par projet (top-level) puis sous-projet, puis
+  // date de réalisation décroissante au sein d'un même groupe.
   const raTasks = all.filter(t=>t.statut==='fait (R.A.)')
-    .sort((a,b)=>{ const da=a.completedAt||a.echeance||'0000',db=b.completedAt||b.echeance||'0000'; return db.localeCompare(da); });
+    .map(t=>{
+      const proj = getProject(t.projectId);
+      const isChild = !!(proj && proj.parentId);
+      const parent = isChild ? getProject(proj.parentId) : null;
+      return Object.assign({}, t, {
+        projectName: parent ? parent.name : (proj ? proj.name : ''),
+        subProjectName: isChild ? (proj ? proj.name : '') : ''
+      });
+    })
+    .sort((a,b)=>{
+      const pc = a.projectName.localeCompare(b.projectName, 'fr');
+      if(pc !== 0) return pc;
+      const sc = a.subProjectName.localeCompare(b.subProjectName, 'fr');
+      if(sc !== 0) return sc;
+      const da=a.completedAt||a.echeance||'0000',db=b.completedAt||b.echeance||'0000';
+      return db.localeCompare(da);
+    });
   const selYear = state.raYear || new Date().getFullYear().toString();
   if(selYear==='all') return raTasks;
   return raTasks.filter(t=>{ const y=(t.completedAt||t.echeance||'').slice(0,4); return y===selYear; });
@@ -2874,15 +3074,32 @@ function exportExcel(){
     XLSX.utils.book_append_sheet(wb, wsVig, 'Vigilances');
   }
 
-  /* ---- Sheet 3 : Rapport d'activités (Fait R.A.) ---- */
-  const raTasks = getAllTasks().filter(t => t.statut === 'fait (R.A.)');
+  /* ---- Sheet 3 : Rapport d'activités (Fait R.A., toutes années) ---- */
+  // Classification ordonnée par projet puis sous-projet, colonnes identiques
+  // (voir aussi getRaFilteredTasks utilisé par les exports RA dédiés) — mais
+  // sans filtre d'année : cette feuille fait partie de l'export complet.
+  const raTasks = getAllTasks().filter(t => t.statut === 'fait (R.A.)')
+    .map(t=>{
+      const proj = getProject(t.projectId);
+      const isChild = !!(proj && proj.parentId);
+      const parent = isChild ? getProject(proj.parentId) : null;
+      return Object.assign({}, t, {
+        projectName: parent ? parent.name : (proj ? proj.name : ''),
+        subProjectName: isChild ? (proj ? proj.name : '') : ''
+      });
+    })
+    .sort((a,b)=>{
+      const pc = a.projectName.localeCompare(b.projectName, 'fr');
+      if(pc !== 0) return pc;
+      const sc = a.subProjectName.localeCompare(b.subProjectName, 'fr');
+      if(sc !== 0) return sc;
+      return (b.completedAt||'').localeCompare(a.completedAt||'');
+    });
   if(raTasks.length > 0){
-    const raHeader = ['Projet', 'Origine', 'Réalisation', 'Responsable', 'Date réalisation'];
-    const raRows = raTasks
-      .sort((a,b) => (b.completedAt||'').localeCompare(a.completedAt||''))
-      .map(t => [t.projectPath, t.originLabel, t.description, t.responsable||'', t.completedAt||t.echeance||'']);
+    const raHeader = ['Projet', 'Sous-projet', 'Origine', 'Réalisation', 'Responsable', 'Date réalisation'];
+    const raRows = raTasks.map(t => [t.projectName, t.subProjectName, t.originLabel, t.description, t.responsable||'', t.completedAt||t.echeance||'']);
     const wsRa = XLSX.utils.aoa_to_sheet([raHeader, ...raRows]);
-    wsRa['!cols'] = [{wch:28},{wch:20},{wch:55},{wch:16},{wch:16}];
+    wsRa['!cols'] = [{wch:24},{wch:24},{wch:20},{wch:50},{wch:16},{wch:16}];
     XLSX.utils.book_append_sheet(wb, wsRa, 'Rapport activités');
   }
 
@@ -2915,9 +3132,9 @@ function exportRaExcel(){
   const selYear = state.raYear || new Date().getFullYear().toString();
   const label = selYear==='all' ? 'Toutes années' : selYear;
   const BOM = '\uFEFF';
-  const rows = [['Projet','Origine','Réalisation','Responsable','Date de réalisation']];
+  const rows = [['Projet','Sous-projet','Origine','Réalisation','Responsable','Date de réalisation']];
   tasks.forEach(t => rows.push([
-    t.projectPath, t.originLabel, t.description,
+    t.projectName, t.subProjectName, t.originLabel, t.description,
     t.responsable||'',
     t.completedAt||t.echeance||''
   ]));
@@ -2932,24 +3149,47 @@ function exportRaWord(){
   const tasks = getRaFilteredTasks();
   const selYear = state.raYear || new Date().getFullYear().toString();
   const label = selYear==='all' ? '' : ' '+selYear;
-  const byProject = {};
+  // Groupes ordonnés par projet puis sous-projet (déjà triés par
+  // getRaFilteredTasks) — on respecte cet ordre sans re-grouper par un
+  // simple objet (qui ne garantit pas l'ordre d'insertion de façon fiable
+  // une fois les clés mélangées).
+  const groups = [];
   tasks.forEach(t=>{
-    if(!byProject[t.projectPath]) byProject[t.projectPath]=[];
-    byProject[t.projectPath].push(t);
+    const last = groups[groups.length-1];
+    if(last && last.projectName===t.projectName && last.subProjectName===t.subProjectName){
+      last.tasks.push(t);
+    } else {
+      groups.push({ projectName:t.projectName, subProjectName:t.subProjectName, tasks:[t] });
+    }
   });
   const td = 'border:1px solid #ccc;padding:6px 10px;';
-  const o = '\x3c'; const c = '\x3e'; // < and > via hex to avoid HTML parser confusion
-  const projectSections = Object.entries(byProject).map(([proj,tks])=>{
-    const rows = tks.map(t=>
+  const o = '\x3c'; const c = '\x3e'; // < et > via hex pour éviter toute confusion avec le parseur HTML
+  // Largeurs de colonnes fixes et identiques pour TOUTES les sections, afin
+  // que les tableaux de chaque projet soient visuellement alignés entre eux.
+  const colgroup = o+'colgroup'+c +
+    o+'col style="width:18%;"'+c + o+'col style="width:42%;"'+c +
+    o+'col style="width:20%;"'+c + o+'col style="width:20%;"'+c +
+    o+'/colgroup'+c;
+  let lastProjectHeading = null;
+  const projectSections = groups.map(g=>{
+    const rows = g.tasks.map(t=>
       o+'tr'+c+
-      o+'td style="'+td+'"'+(t.originLabel||'')+o+'/td'+c+
-      o+'td style="'+td+'"'+(t.description||'')+o+'/td'+c+
-      o+'td style="'+td+'"'+(t.responsable||'')+o+'/td'+c+
-      o+'td style="'+td+'"'+(t.completedAt||t.echeance||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.originLabel||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.description||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.responsable||'')+o+'/td'+c+
+      o+'td style="'+td+'"'+c+(t.completedAt||t.echeance||'')+o+'/td'+c+
       o+'/tr'+c
     ).join('');
-    return o+'h2 style="font-family:Arial;font-size:13pt;color:#1F3A5C;margin:18pt 0 6pt;"'+c+escapeHtml(proj)+o+'/h2'+c+
-      o+'table style="border-collapse:collapse;width:100%;font-family:Arial;font-size:10pt;"'+c+
+    const heading = g.projectName !== lastProjectHeading
+      ? o+'h2 style="font-family:Arial;font-size:13pt;color:#1F3A5C;margin:18pt 0 4pt;"'+c+escapeHtml(g.projectName)+o+'/h2'+c
+      : '';
+    lastProjectHeading = g.projectName;
+    const subHeading = g.subProjectName
+      ? o+'h3 style="font-family:Arial;font-size:11pt;color:#2E86C1;margin:4pt 0 6pt;"'+c+escapeHtml(g.subProjectName)+o+'/h3'+c
+      : '';
+    return heading + subHeading +
+      o+'table style="border-collapse:collapse;width:100%;table-layout:fixed;font-family:Arial;font-size:10pt;"'+c+
+      colgroup+
       o+'thead'+c+o+'tr style="background:#E8EFF5;"'+c+
       o+'th style="'+td+'text-align:left;"'+c+'Origine'+o+'/th'+c+
       o+'th style="'+td+'text-align:left;"'+c+'Réalisation'+o+'/th'+c+
@@ -2957,7 +3197,7 @@ function exportRaWord(){
       o+'th style="'+td+'text-align:left;"'+c+'Date'+o+'/th'+c+
       o+'/tr'+c+o+'/thead'+c+
       o+'tbody'+c+rows+o+'/tbody'+c+o+'/table'+c;
-  }).join(o+'br'+c);
+  }).join('');
   const docHtml = [
     o+'html xmlns:o="urn:schemas-microsoft-com:office:office"',
     ' xmlns:w="urn:schemas-microsoft-com:office:word"',
@@ -3307,6 +3547,26 @@ async function checkWeeklyReminder(){
       state.banner = 'Rappel : pensez à exporter vos données (JSON) pour en garder une copie de sauvegarde.';
       state.bannerType = 'warning';
       render();
+    }
+  } catch(e){}
+}
+
+/* ============== SAUVEGARDE JSON AUTOMATIQUE PÉRIODIQUE ============== */
+// Complète le rappel hebdomadaire ci-dessus (qui dépend d'un clic de Jul) :
+// toutes les 24h, un export JSON est déclenché automatiquement (téléchargé
+// en arrière-plan, sans action requise), pour ne jamais dépendre uniquement
+// du geste manuel. Chaque sauvegarde auto remet aussi à zéro le compteur du
+// rappel hebdomadaire (stampExportTime), évitant d'empiler les deux bannières.
+const AUTO_EXPORT_KEY = 'tracker-last-auto-export';
+const AUTO_EXPORT_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24h
+
+async function checkAutoExport(){
+  try {
+    if(!state.data.projects || state.data.projects.length === 0) return; // rien à sauvegarder
+    const last = parseInt(localStorage.getItem(AUTO_EXPORT_KEY)||'0', 10);
+    if(!last || (Date.now() - last) > AUTO_EXPORT_INTERVAL_MS){
+      exportJson(true);
+      localStorage.setItem(AUTO_EXPORT_KEY, Date.now().toString());
     }
   } catch(e){}
 }
@@ -3670,7 +3930,13 @@ document.getElementById('app').addEventListener('click', function(e){
   const pid = el.getAttribute('data-pid');
   const idx = el.getAttribute('data-idx');
 
+  // Quitter le mode "résultats de recherche" dès qu'une action de
+  // navigation (ou toute autre action) est déclenchée — sauf celle qui
+  // sert justement à effacer la recherche.
+  if(action !== 'clear-search') state.searchQuery = '';
+
   switch(action){
+    case 'clear-search': state.searchQuery=''; render(); break;
     case 'open-dashboard': openDashboard(); break;
     case 'open-home': openHome(); break;
     case 'open-calendar': openCalendar(); break;
@@ -4601,6 +4867,12 @@ document.getElementById('app').addEventListener('input', function(e){
     state.draftPage.notes = t.value;
   } else if(t.id === 'qn-input'){
     state.homeNoteInput = t.value;
+  } else if(t.id === 'global-search-input'){
+    state.searchQuery = t.value;
+    const pos = t.selectionStart;
+    render();
+    const el2 = document.getElementById('global-search-input');
+    if(el2){ el2.focus(); try{ el2.setSelectionRange(pos, pos); }catch(e2){} }
   }
 });
 
@@ -4644,6 +4916,11 @@ document.getElementById('app').addEventListener('keydown', function(e){
     render();
     return;
   }
+  if(e.key === 'Escape' && e.target.id === 'global-search-input'){
+    state.searchQuery = '';
+    render();
+    return;
+  }
   if(e.key === 'Enter' && e.target.id === 'qn-input'){
     const text = e.target.value.trim();
     if(text){
@@ -4663,6 +4940,7 @@ async function init(){
     state.view = 'home';
     render();
     await checkWeeklyReminder();
+    if(!state.banner) await checkAutoExport();
     if(!state.banner && state.data.projects.length === 0){
       showBanner('Aucun projet trouvé dans cet outil. Si vous attendiez de retrouver des projets existants, utilisez « Importer (JSON) » pour les restaurer depuis une sauvegarde.', 'info');
     }
