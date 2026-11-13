@@ -1,4 +1,3 @@
-[ÉTAT.md](https://github.com/user-attachments/files/34798682/ETAT.md)
 # ÉTAT — Suivi de Projets (HUG)
 
 ## Dernière session
@@ -93,9 +92,27 @@ jour) :
    (+ `overflow:auto` et `min-width:200px` pour que la poignée fonctionne
    correctement dans les deux sens).
 
-Contrôle anti-régression : `node --check` sur les 8 fichiers touchés et sur
+**1 correction suite à un 3e retour de Jul, même jour** : en agrandissant un
+champ de texte riche à l'horizontale, la fenêtre (modale) se fermait parfois
+toute seule.
+
+10. ✅ **Bug corrigé + fenêtres agrandies par défaut** (`styles.css`) :
+    - `.rte-body` n'avait pas de `max-width` : en tirant la poignée vers la
+      droite, le champ pouvait dépasser la largeur de la modale (qui n'avait
+      pas `overflow-x:hidden`) et déborder par-dessus le fond semi-transparent
+      cliquable (qui ferme la modale au clic) — d'où la fermeture intempestive.
+      Corrigé avec `max-width:100%` sur `.rte-body` et `overflow-x:hidden` sur
+      `.modal-card` : un champ ne peut plus déborder de sa fenêtre.
+    - En plus de corriger le bug, et suite à la suggestion de Jul de partir
+      sur une fenêtre plus grande dès le départ plutôt que de compter sur le
+      redimensionnement manuel : la modale « Modifier/Nouveau projet »
+      (`.modal-card.xwide`) est passée de 820px à 960px de large, et la
+      hauteur initiale des champs de texte riche (`.rte-body`) est passée de
+      100px à 140px — pour réduire le besoin de redimensionner à la main.
+
+Contrôle anti-régression : `node --check` sur les fichiers touchés et sur
 le bundle final. Script de fumée (16 assertions) toujours au vert après ces
-2 corrections. `ARCHITECTURE.md` mis à jour (carte fonctionnalité→fichier,
+3 corrections. `ARCHITECTURE.md` mis à jour (carte fonctionnalité→fichier,
 modèle de données — `cellNotes` manquait dans le schéma racine, corrigé au
 passage —, pièges connus).
 
@@ -124,3 +141,4 @@ pour le modèle de données complet.
 Aucun. Voir §4 « Pièges connus / zones fragiles » d'`ARCHITECTURE.md` pour
 les zones à surveiller lors de futures modifications (pas des bugs
 actuels, des risques de régression si on y touche sans précaution).
+[ÉTAT.md](https://github.com/user-attachments/files/34799167/ETAT.md)
