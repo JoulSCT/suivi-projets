@@ -88,22 +88,34 @@ function renderRaDashboard(all){
   if(!state.raYear) state.raYear = years.includes(currentYear) ? currentYear : (years[0]||currentYear);
   const selYear = state.raYear;
 
-  const filtered = raTasks.filter(t=>{
-    if(selYear==='all') return true;
-    const y = (t.completedAt||t.echeance||'').slice(0,4);
-    return y===selYear;
-  });
+  // getRaFilteredTasks() applique déjà le filtre d'année (state.raYear) ET
+  // trie par projet puis sous-projet puis date — même logique que les
+  // exports Excel/Word, pour que la vue à l'écran, le CSV et le Word
+  // racontent toujours la même histoire (voir ARCHITECTURE.md).
+  const filtered = getRaFilteredTasks();
 
-  const byProject = {};
+  // Regroupement par projet + sous-projet, en groupes consécutifs (déjà
+  // triés) — même logique que exportRaWord().
+  const rawGroups = [];
   filtered.forEach(t=>{
-    if(!byProject[t.projectPath]) byProject[t.projectPath] = { color:t.projectColor, tasks:[] };
-    byProject[t.projectPath].tasks.push(t);
+    const last = rawGroups[rawGroups.length-1];
+    if(last && last.projectName===t.projectName && last.subProjectName===t.subProjectName){
+      last.tasks.push(t);
+    } else {
+      rawGroups.push({ projectName:t.projectName, subProjectName:t.subProjectName, color:t.projectColor, tasks:[t] });
+    }
   });
 
   const yearOptions = '<option value="all">Toutes les années</option>' +
     years.map(y=>'<option value="'+y+'"'+(selYear===y?' selected':'')+'>'+y+'</option>').join('');
 
-  const groups = Object.entries(byProject).map(([projName, grp])=>{
+  // Largeurs de colonnes fixes et IDENTIQUES pour tous les groupes, pour
+  // que les tableaux de chaque projet restent alignés entre eux (sinon
+  // chaque <table> ajuste ses colonnes indépendamment selon son contenu).
+  const colgroupHtml = '<colgroup><col style="width:18%;"><col style="width:42%;"><col style="width:20%;"><col style="width:20%;"></colgroup>';
+
+  let lastProjectHeading = null;
+  const groups = rawGroups.map(grp=>{
     const rows = grp.tasks.map(t=>
       '<tr>' +
         '<td>'+escapeHtml(t.originLabel)+'</td>' +
@@ -112,19 +124,27 @@ function renderRaDashboard(all){
         '<td style="font-family:var(--font-mono);font-size:.78rem;">'+(t.completedAt?fmtDate(t.completedAt):(t.echeance?fmtDate(t.echeance):'—'))+'</td>' +
       '</tr>'
     ).join('');
-    return '<div style="margin-bottom:28px;">' +
-      '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">' +
-        '<span style="width:10px;height:10px;border-radius:50%;background:'+grp.color+';flex-shrink:0;display:inline-block;"></span>' +
-        '<span style="font-family:var(--font-display);font-weight:600;font-size:1rem;">'+escapeHtml(projName)+'</span>' +
-        '<span style="font-family:var(--font-mono);font-size:.7rem;color:var(--ink-soft);">\u00b7 '+grp.tasks.length+' réalisation(s)</span>' +
-      '</div>' +
-      '<table class="ledger"><thead><tr><th>Origine</th><th>Réalisation</th><th>Responsable</th><th>Date réalisation</th></tr></thead>' +
+    const showProjectHeading = grp.projectName !== lastProjectHeading;
+    lastProjectHeading = grp.projectName;
+    const heading = showProjectHeading
+      ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">' +
+          '<span style="width:10px;height:10px;border-radius:50%;background:'+grp.color+';flex-shrink:0;display:inline-block;"></span>' +
+          '<span style="font-family:var(--font-display);font-weight:600;font-size:1rem;">'+escapeHtml(grp.projectName)+'</span>' +
+        '</div>'
+      : '';
+    const subLine = grp.subProjectName
+      ? '<div style="font-size:.84rem;color:var(--ink-soft);margin:0 0 8px 18px;">'+escapeHtml(grp.subProjectName)+' \u00b7 '+grp.tasks.length+' réalisation(s)</div>'
+      : '<div style="font-size:.7rem;font-family:var(--font-mono);color:var(--ink-soft);margin:0 0 8px 18px;">\u00b7 '+grp.tasks.length+' réalisation(s)</div>';
+    return '<div style="margin-bottom:'+(showProjectHeading?'8px':'28px')+';">' +
+      heading + subLine +
+      '<table class="ledger" style="table-layout:fixed;">' + colgroupHtml +
+      '<thead><tr><th>Origine</th><th>Réalisation</th><th>Responsable</th><th>Date réalisation</th></tr></thead>' +
       '<tbody>'+rows+'</tbody></table>' +
     '</div>';
   }).join('');
 
   const totalCount = filtered.length;
-  const projCount = Object.keys(byProject).length;
+  const projCount = new Set(rawGroups.map(g=>g.projectName)).size;
   const summaryBadge = '<div style="display:flex;gap:16px;margin-bottom:8px;flex-wrap:wrap;">' +
     '<span style="font-family:var(--font-mono);font-size:.78rem;color:#6B4C9A;background:#F3F0FF;padding:4px 10px;border-radius:4px;">' + totalCount + ' réalisation(s)</span>' +
     '<span style="font-family:var(--font-mono);font-size:.78rem;color:var(--ink-soft);background:var(--blush);padding:4px 10px;border-radius:4px;">' + projCount + ' projet(s)</span>' +
@@ -188,7 +208,13 @@ function renderTasksDashboard(all){
   const total = all.length;
   const aFaire = all.filter(t=>t.statut==='à faire').length;
   const enCours = all.filter(t=>t.statut==='en cours').length;
-  const fait = all.filter(t=>t.statut==='fait').length;
+  // "Terminées" regroupe TOUS les statuts de fin (fait, fait (R.A.), non
+  // réalisé) — pas seulement 'fait' — afin que Total = À faire + En cours +
+  // Terminées soit toujours une identité exacte (les 5 statuts de
+  // STATUS_LIST se répartissent intégralement dans ces 3 cases). "En
+  // retard" reste un sous-ensemble transverse de À faire/En cours (pas une
+  // 4e catégorie disjointe) et ne s'additionne donc pas aux 3 autres.
+  const fait = all.filter(t=>DONE_STATUSES.includes(t.statut)).length;
   const enRetard = all.filter(isOverdue).length;
   const aFaireOk = aFaire - all.filter(t=>t.statut==='à faire' && isOverdue(t)).length;
   const enCoursOk = enCours - all.filter(t=>t.statut==='en cours' && isOverdue(t)).length;
@@ -217,7 +243,11 @@ function renderTasksDashboard(all){
 
   let rows = all.filter(t => {
     if(f.projet!=='all' && t.projectId!==f.projet) return false;
-    if(f.statut!=='all' && t.statut!==f.statut) return false;
+    if(f.statut==='__done__'){
+      if(!DONE_STATUSES.includes(t.statut)) return false;
+    } else if(f.statut!=='all' && t.statut!==f.statut){
+      return false;
+    }
     if(f.responsable!=='all' && t.responsable!==f.responsable) return false;
     if(f.origine!=='all' && t.origin!==f.origine) return false;
     if(f.onlyOverdue && !isOverdue(t)) return false;
@@ -276,7 +306,12 @@ function renderTasksDashboard(all){
         '</tr>';
       }).join('');
 
-  function cardClass(name){ return (name==='total'&&f.statut==='all'&&!f.onlyOverdue)||(name==='overdue'&&f.onlyOverdue)||(name===f.statut&&!f.onlyOverdue)?' active':''; }
+  function cardClass(name){
+    if(f.onlyOverdue) return name==='overdue' ? ' active' : '';
+    if(name==='total') return f.statut==='all' ? ' active' : '';
+    if(name==='fait') return f.statut==='__done__' ? ' active' : '';
+    return name===f.statut ? ' active' : '';
+  }
 
   const statusBar = total===0 ? '' :
     '<div class="status-bar">' +
@@ -286,18 +321,18 @@ function renderTasksDashboard(all){
       (enRetard?'<div class="status-bar-segment" style="width:'+(enRetard/total*100)+'%;background:var(--stamp-red);"></div>':'') +
     '</div>' +
     '<div class="status-legend">' +
-      '<span class="status-legend-item" data-action="dash-filter-statut" data-value="fait"><span class="dot" style="background:'+STATUS_COLOR['fait']+'"></span>Terminées · '+fait+'</span>' +
+      '<span class="status-legend-item" data-action="dash-filter-statut" data-value="__done__"><span class="dot" style="background:'+STATUS_COLOR['fait']+'"></span>Terminées · '+fait+'</span>' +
       '<span class="status-legend-item" data-action="dash-filter-statut" data-value="en cours"><span class="dot" style="background:'+STATUS_COLOR['en cours']+'"></span>En cours · '+enCours+'</span>' +
       '<span class="status-legend-item" data-action="dash-filter-statut" data-value="à faire"><span class="dot" style="background:'+STATUS_COLOR['à faire']+'"></span>À faire · '+aFaire+'</span>' +
-      (enRetard?'<span class="status-legend-item" data-action="dash-filter-overdue"><span class="dot" style="background:var(--stamp-red)"></span>En retard · '+enRetard+'</span>':'') +
+      (enRetard?'<span class="status-legend-item" data-action="dash-filter-overdue" title="Sous-ensemble de À faire / En cours — déjà inclus dedans"><span class="dot" style="background:var(--stamp-red)"></span>En retard · '+enRetard+'</span>':'') +
     '</div>';
 
   return '<div class="stat-row">' +
-      '<div class="stat-card'+cardClass('total')+'" data-action="dash-filter-reset"><div class="stat-num">'+total+'</div><div class="stat-label">Total</div></div>' +
+      '<div class="stat-card'+cardClass('total')+'" data-action="dash-filter-reset" title="À faire + En cours + Terminées"><div class="stat-num">'+total+'</div><div class="stat-label">Total</div></div>' +
       '<div class="stat-card'+cardClass('à faire')+'" data-action="dash-filter-statut" data-value="à faire"><div class="stat-num">'+aFaire+'</div><div class="stat-label">À faire</div></div>' +
       '<div class="stat-card'+cardClass('en cours')+'" data-action="dash-filter-statut" data-value="en cours"><div class="stat-num">'+enCours+'</div><div class="stat-label">En cours</div></div>' +
-      '<div class="stat-card'+cardClass('fait')+'" data-action="dash-filter-statut" data-value="fait"><div class="stat-num">'+fait+'</div><div class="stat-label">Terminées</div></div>' +
-      '<div class="stat-card overdue'+cardClass('overdue')+'" data-action="dash-filter-overdue"><div class="stat-num">'+enRetard+'</div><div class="stat-label">En retard</div></div>' +
+      '<div class="stat-card'+cardClass('fait')+'" data-action="dash-filter-statut" data-value="__done__" title="Fait + Fait (R.A.) + Non réalisé"><div class="stat-num">'+fait+'</div><div class="stat-label">Terminées</div></div>' +
+      '<div class="stat-card overdue'+cardClass('overdue')+'" data-action="dash-filter-overdue" title="Sous-ensemble de À faire / En cours — ne s\'ajoute pas au total"><div class="stat-num">'+enRetard+'</div><div class="stat-label">En retard</div></div>' +
     '</div>' +
     statusBar +
     '<div class="filter-row">' +
